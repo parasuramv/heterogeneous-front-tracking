@@ -90,9 +90,7 @@ The full derivation, with the observed convergence orders, is in
 
 Notebooks 01 and 02 include the solver and can run independently in Jupyter
 or Colab. Notebooks 03–08 require this repository and its installed dependencies.
-For a private repository, authenticate when cloning it before opening these
-notebooks; an unauthenticated Colab session cannot fetch the package. Regenerate the
-notebooks with `python tools/build_notebooks.py`, then execute them with
+Regenerate the notebooks with `python tools/build_notebooks.py`, then execute them with
 `python tools/check_notebooks.py --write`.
 
 ## Get started
@@ -223,3 +221,9 @@ explains why homogenisation must use the effective coefficient of the actual
 interpolant. `tools/build_notebooks.py` is the notebook source of truth;
 regenerate bundled source after package edits and execute all notebooks before
 committing. Cell IDs are deterministic so diffs expose substantive changes.
+
+## License and citation
+
+Released under the [MIT License](LICENSE). If you use this code in your work,
+please cite it: the *Cite this repository* button on the GitHub page gives
+BibTeX and APA entries generated from [`CITATION.cff`](CITATION.cff).

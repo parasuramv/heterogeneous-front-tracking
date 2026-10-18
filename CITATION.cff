@@ -9,6 +9,7 @@ authors:
     affiliation: "TIFR Centre for Applicable Mathematics, Bengaluru"
     orcid: "https://orcid.org/0009-0001-2681-1982"
 repository-code: "https://github.com/parasuramv/heterogeneous-front-tracking"
+license: MIT
 abstract: >-
   Front tracking for the heterogeneous scalar conservation law
   u_t + (g(x)|u|^p)_x = 0, p > 1, on the line or the circle, with g
