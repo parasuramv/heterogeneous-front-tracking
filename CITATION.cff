@@ -1,0 +1,48 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below, together with the papers it implements."
+title: "heterogeneous-front-tracking: front tracking for u_t + (g(x)|u|^p)_x = 0"
+type: software
+version: 0.1.0
+authors:
+  - family-names: "Venkatesh"
+    given-names: "Parasuram"
+    affiliation: "TIFR Centre for Applicable Mathematics, Bengaluru"
+    orcid: "https://orcid.org/0009-0001-2681-1982"
+repository-code: "https://github.com/parasuramv/heterogeneous-front-tracking"
+abstract: >-
+  Front tracking for the heterogeneous scalar conservation law
+  u_t + (g(x)|u|^p)_x = 0, p > 1, on the line or the circle, with g
+  approximated by its piecewise-affine nodal interpolant. Fronts are
+  closed-form curves, event times solve linear equations, and transverse
+  zeros of a sign-changing g act as absorbing interfaces. Convergence as
+  the discretisation is refined is studied empirically only.
+keywords:
+  - conservation laws
+  - front tracking
+  - spatially heterogeneous flux
+  - entropy solutions
+  - numerical analysis
+references:
+  - type: article
+    title: "Front tracking for scalar conservation laws with spatially heterogeneous flux"
+    authors:
+      - family-names: "Venkatesh"
+        given-names: "Parasuram"
+    journal: "Indian Journal of Pure and Applied Mathematics"
+    year: 2026
+    issn: "0975-7465"
+    doi: "10.1007/s13226-026-00975-x"
+  - type: article
+    title: "Failure of uniqueness for scalar conservation laws"
+    authors:
+      - family-names: "Ghoshal"
+        given-names: "Shyam Sundar"
+      - family-names: "Sylla"
+        given-names: "Abraham"
+      - family-names: "Venkatesh"
+        given-names: "Parasuram"
+    year: 2026
+    identifiers:
+      - type: other
+        value: "arXiv:2601.08771"
+    url: "https://arxiv.org/abs/2601.08771"

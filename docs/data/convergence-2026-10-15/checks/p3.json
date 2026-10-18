@@ -1,0 +1,254 @@
+[
+  {
+    "baseline": "convergence_circle-sign-changing_p3p0.json",
+    "problem": "circle-sign-changing",
+    "power": 3.0,
+    "samples": 801,
+    "dense_samples": 1601,
+    "reference": {
+      "power": 3.0,
+      "final_time": 1.0,
+      "delta": 0.0015625,
+      "nodes": 2048,
+      "max_events": 5000000,
+      "events": 435649,
+      "seconds": 39.37596324272454
+    },
+    "mesh": [
+      {
+        "delta": 0.0015625,
+        "nodes": 16,
+        "h": 0.0625,
+        "theta_l1": 0.0001025187428450888,
+        "primitive": 0.0013040303037467615,
+        "primitive_dense": 0.0013040303037474277
+      },
+      {
+        "delta": 0.0015625,
+        "nodes": 32,
+        "h": 0.03125,
+        "theta_l1": 2.5679203742079674e-05,
+        "primitive": 0.00037161130837559675,
+        "primitive_dense": 0.00037161130837559675
+      },
+      {
+        "delta": 0.0015625,
+        "nodes": 64,
+        "h": 0.015625,
+        "theta_l1": 7.79432274874086e-06,
+        "primitive": 0.00012762310498753981,
+        "primitive_dense": 0.00012762310498809493
+      },
+      {
+        "delta": 0.0015625,
+        "nodes": 128,
+        "h": 0.0078125,
+        "theta_l1": 2.6115331607291487e-06,
+        "primitive": 3.4190426086544434e-05,
+        "primitive_dense": 3.4190426086988523e-05
+      },
+      {
+        "delta": 0.0015625,
+        "nodes": 256,
+        "h": 0.00390625,
+        "theta_l1": 1.0069825659978413e-06,
+        "primitive": 8.884494561600675e-06,
+        "primitive_dense": 8.884494561989253e-06
+      }
+    ],
+    "orders": {
+      "theta_l1": 1.6637041892816138,
+      "primitive": 1.783707405141979,
+      "primitive_dense": 1.7837074051276316
+    }
+  },
+  {
+    "baseline": "convergence_circle-well-signed_p3p0.json",
+    "problem": "circle-well-signed",
+    "power": 3.0,
+    "samples": 801,
+    "dense_samples": 1601,
+    "reference": {
+      "power": 3.0,
+      "final_time": 1.0,
+      "delta": 0.0015625,
+      "nodes": 2048,
+      "max_events": 5000000,
+      "events": 1492997,
+      "seconds": 115.77839857526124
+    },
+    "mesh": [
+      {
+        "delta": 0.0015625,
+        "nodes": 16,
+        "h": 0.0625,
+        "theta_l1": 0.0010982501694597857,
+        "primitive": 0.0006166145697182879,
+        "primitive_dense": 0.0006166145697166225
+      },
+      {
+        "delta": 0.0015625,
+        "nodes": 32,
+        "h": 0.03125,
+        "theta_l1": 0.00027851340222647135,
+        "primitive": 0.00015404211436254034,
+        "primitive_dense": 0.0001540421143613191
+      },
+      {
+        "delta": 0.0015625,
+        "nodes": 64,
+        "h": 0.015625,
+        "theta_l1": 6.972382660780095e-05,
+        "primitive": 3.875927670105028e-05,
+        "primitive_dense": 3.875927669894086e-05
+      },
+      {
+        "delta": 0.0015625,
+        "nodes": 128,
+        "h": 0.0078125,
+        "theta_l1": 1.7387614249984486e-05,
+        "primitive": 9.740270375702131e-06,
+        "primitive_dense": 9.740270374924975e-06
+      },
+      {
+        "delta": 0.0015625,
+        "nodes": 256,
+        "h": 0.00390625,
+        "theta_l1": 4.295494271794642e-06,
+        "primitive": 2.3996695489580944e-06,
+        "primitive_dense": 2.3996695478478713e-06
+      }
+    ],
+    "orders": {
+      "theta_l1": 1.999794856997321,
+      "primitive": 1.9993998036394625,
+      "primitive_dense": 1.999399803782546
+    }
+  },
+  {
+    "baseline": "convergence_line-sign-changing_p3p0.json",
+    "problem": "line-sign-changing",
+    "power": 3.0,
+    "samples": 801,
+    "dense_samples": 1601,
+    "reference": {
+      "power": 3.0,
+      "final_time": 1.0,
+      "delta": 0.0015625,
+      "nodes": 2048,
+      "max_events": 5000000,
+      "events": 370580,
+      "seconds": 46.79950601607561
+    },
+    "mesh": [
+      {
+        "delta": 0.0015625,
+        "nodes": 16,
+        "h": 0.26666666666666666,
+        "theta_l1": 0.010595700196598076,
+        "primitive": 0.027024739568045106,
+        "primitive_dense": 0.027024739568045145
+      },
+      {
+        "delta": 0.0015625,
+        "nodes": 32,
+        "h": 0.12903225806451613,
+        "theta_l1": 0.0035658214269199736,
+        "primitive": 0.009755842260790105,
+        "primitive_dense": 0.009764858108317419
+      },
+      {
+        "delta": 0.0015625,
+        "nodes": 64,
+        "h": 0.06349206349206349,
+        "theta_l1": 0.001171706836395482,
+        "primitive": 0.0033121461137967483,
+        "primitive_dense": 0.0033133741217220916
+      },
+      {
+        "delta": 0.0015625,
+        "nodes": 128,
+        "h": 0.031496062992125984,
+        "theta_l1": 0.00037945301351112763,
+        "primitive": 0.0011037685389772758,
+        "primitive_dense": 0.0011045532519724927
+      },
+      {
+        "delta": 0.0015625,
+        "nodes": 256,
+        "h": 0.01568627450980392,
+        "theta_l1": 0.00012007477061911141,
+        "primitive": 0.0003571373301306472,
+        "primitive_dense": 0.00035733235460806874
+      }
+    ],
+    "orders": {
+      "theta_l1": 1.5825266063317134,
+      "primitive": 1.5303287661661185,
+      "primitive_dense": 1.5302030847019599
+    }
+  },
+  {
+    "baseline": "convergence_line-well-signed_p3p0.json",
+    "problem": "line-well-signed",
+    "power": 3.0,
+    "samples": 801,
+    "dense_samples": 1601,
+    "reference": {
+      "power": 3.0,
+      "final_time": 1.0,
+      "delta": 0.0015625,
+      "nodes": 2048,
+      "max_events": 5000000,
+      "events": 432717,
+      "seconds": 39.46515795215964
+    },
+    "mesh": [
+      {
+        "delta": 0.0015625,
+        "nodes": 16,
+        "h": 0.5333333333333333,
+        "theta_l1": 0.015259916773067185,
+        "primitive": 0.021570152567632173,
+        "primitive_dense": 0.021571108115500115
+      },
+      {
+        "delta": 0.0015625,
+        "nodes": 32,
+        "h": 0.25806451612903225,
+        "theta_l1": 0.003616137003336923,
+        "primitive": 0.005395317090664542,
+        "primitive_dense": 0.00539617208558496
+      },
+      {
+        "delta": 0.0015625,
+        "nodes": 64,
+        "h": 0.12698412698412698,
+        "theta_l1": 0.0009085575773013331,
+        "primitive": 0.0013147371578420275,
+        "primitive_dense": 0.0013147371578416944
+      },
+      {
+        "delta": 0.0015625,
+        "nodes": 128,
+        "h": 0.06299212598425197,
+        "theta_l1": 0.00021985371370087902,
+        "primitive": 0.0003207933098713367,
+        "primitive_dense": 0.00032099479922931273
+      },
+      {
+        "delta": 0.0015625,
+        "nodes": 256,
+        "h": 0.03137254901960784,
+        "theta_l1": 5.407654160390083e-05,
+        "primitive": 7.827044320851684e-05,
+        "primitive_dense": 7.827044320862786e-05
+      }
+    ],
+    "orders": {
+      "theta_l1": 1.9903249307380306,
+      "primitive": 1.9866802425416081,
+      "primitive_dense": 1.9866259847510268
+    }
+  }
+]
