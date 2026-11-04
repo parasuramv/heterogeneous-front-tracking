@@ -167,6 +167,12 @@ Two options handle zeros of $g$:
 * Fronts carry an anchor $(t_0,x_0,\sigma_0)$, so positions are evaluated in
   closed form and never time-stepped. Events wait in a heap with lazy
   invalidation.
+* Fronts and interfaces form a doubly linked list. A queued event names its
+  item, so nothing is searched for, and an event relinks only the items it
+  touches; `items` is a list view rebuilt on demand. On the whole line an event
+  therefore costs $O(\log F)$ for $F$ items, plus its cluster. On the circle the
+  order is still re-sorted after each collision, absorption and seam crossing,
+  which costs $O(F)$ per such event.
 * The θ-L¹ distance, primitive values, and profile integrals use closed forms
   (up to floating-point roundoff), including across multiple circle periods.
   `u_l1_distance` is exact for trackers sharing the same heterogeneity object.

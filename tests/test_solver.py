@@ -13,6 +13,17 @@ def xu2(delta=1.0):
     return MultiplicativeFlux(PiecewiseAffine([-1, 1], [-1, 1], extend="affine"), delta)
 
 
+def assert_links(test, tracker):
+    """prev/next agree with the item list, both ways (cyclically on a circle)."""
+    items, n = tracker.items, len(tracker.items)
+    for k, item in enumerate(items):
+        nxt = items[(k + 1) % n] if (tracker.cyclic or k + 1 < n) else None
+        prv = items[k - 1] if (tracker.cyclic or k > 0) else None
+        test.assertIs(item.next, nxt)
+        test.assertIs(item.prev, prv)
+    tracker.check_levels()
+
+
 def assert_invariants(test, tracker, times, *, window=None, mass_tol=1e-12):
     """Monotone TV and front count, ordered positions, intact level chain, mass budget.
 
@@ -145,6 +156,29 @@ class EngineTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             tracker.run(10.0)
         tracker.check_levels()
+
+    def test_events_relink_instead_of_rebuilding_the_list(self):
+        """A run resolves events through links; the item list is only a view."""
+        g = PiecewiseAffine.from_function(lambda x: (x - 0.4) * (x + 0.7), np.linspace(-2, 2, 41))
+        tracker = HeteroFrontTracker.from_function(MultiplicativeFlux(g, 2.0**-8), lambda x: np.cos(2 * x),
+                                                   window=(-1.5, 1.5), cells=768, record_history=False)
+        builds = []
+        view = type(tracker).items.fget
+
+        class Counting(type(tracker)):
+            @property
+            def items(self):
+                builds.append(self._items is None)
+                return view(self)
+
+        tracker.__class__ = Counting
+        tracker.run(2.0)
+        tracker.__class__ = HeteroFrontTracker
+        self.assertGreater(tracker.event_count, 3000)
+        self.assertGreater(tracker.counts["absorption"], 5)
+        self.assertEqual(sum(builds), 0)  # nothing read the list during the run
+        assert_links(self, tracker)
+        self.assertTrue(all(c.prev is None and c.next is None for c in tracker.snapshot()))
 
     def test_backward_time_rejected(self):
         tracker = HeteroFrontTracker(xu2(), [1.0], [0, -1]).run(1.0)

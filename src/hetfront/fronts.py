@@ -32,6 +32,9 @@ class Front:
     t_pair: float = field(default=math.inf, repr=False)
     version: int = field(default=0, repr=False)  # invalidates queued events
     law: object = field(default=QUADRATIC, repr=False)
+    # Neighbours in the tracker's linked order (None when not in a tracker).
+    prev: object = field(default=None, init=False, repr=False)
+    next: object = field(default=None, init=False, repr=False)
 
     def x(self, t):
         return self.law.position(self.x0, self.s0, self.alpha, self.kappa, t - self.t0)
@@ -65,6 +68,8 @@ class Interface:
     t_own: float = field(default=math.inf, repr=False)
     own_kind: str = field(default="", repr=False)
     version: int = field(default=0, repr=False)
+    prev: object = field(default=None, init=False, repr=False)
+    next: object = field(default=None, init=False, repr=False)
 
     def rate(self, delta):
         """Net mass flux into the zero: f(z-) - f(z+)."""

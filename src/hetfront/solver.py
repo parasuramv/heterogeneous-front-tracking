@@ -57,12 +57,84 @@ class _TrackerCore:
         self.event_count = 0
         self.counts = {"collision": 0, "corner": 0, "absorption": 0,
                        "emission": 0, "initial_emission": 0, "multi_front_collision": 0}
-        self.items = []        # Fronts and Interfaces in spatial (cyclic) order
+        # Fronts and Interfaces in spatial (cyclic) order, as a doubly linked
+        # list entered at _head. An event relinks only around the items it
+        # touches; ``items`` is a list view rebuilt after the links change.
+        self._head, self._count, self._items = None, 0, []
         self.pieces = []       # retired Piece records, when record_history
         self.events = []       # (t, x, kind), when record_history
         self.interface_log = []  # (t, x, kL, kR) after every interface change
         # Event queue with lazy invalidation: entries carry the item's version.
         self._heap, self._seq = [], itertools.count()
+
+    # ---------------------------------------------------------------- links
+    @property
+    def items(self):
+        """Fronts and Interfaces in spatial (cyclic) order. Do not modify."""
+        if self._items is None:
+            out, item = [], self._head
+            for _ in range(self._count):
+                out.append(item)
+                item = item.next
+            self._items = out
+        return self._items
+
+    def _walk(self):
+        """Live items from the head, without building the list view."""
+        item = self._head
+        for _ in range(self._count):
+            yield item
+            item = item.next
+
+    @staticmethod
+    def _chain(seq):
+        """Link consecutive items; None entries mark the open ends of a line."""
+        for a, b in zip(seq, seq[1:]):
+            if a is not None:
+                a.next = b
+            if b is not None:
+                b.prev = a
+
+    def _link(self, items):
+        """Make ``items`` (a spatially ordered list) the tracker's item order."""
+        self._chain(list(items))
+        if items:
+            if self.cyclic:
+                items[-1].next, items[0].prev = items[0], items[-1]
+            else:
+                items[0].prev = items[-1].next = None
+        self._head = items[0] if items else None
+        self._count, self._items = len(items), list(items)
+
+    def _alive(self, item):
+        return item is self._head or item.prev is not None
+
+    def _unlink(self, item):
+        """Remove one item from the order."""
+        before, after = item.prev, item.next
+        if self._count == 1:
+            self._head = None
+        else:
+            self._chain([before, after])
+            if item is self._head:
+                self._head = after
+        item.prev = item.next = None
+        self._count -= 1
+        self._items = None
+
+    def _insert_after(self, anchor, seq):
+        if seq:
+            self._chain([anchor, *seq, anchor.next])
+            self._count += len(seq)
+            self._items = None
+
+    def _insert_before(self, anchor, seq):
+        if seq:
+            self._chain([anchor.prev, *seq, anchor])
+            if anchor is self._head:
+                self._head = seq[0]
+            self._count += len(seq)
+            self._items = None
 
     # ------------------------------------------------------------- geometry
     def _tol(self, x):
@@ -117,14 +189,14 @@ class _TrackerCore:
         tau = self.law.travel_time(f.x0, f.s0, float(target), float(s_target), f.kappa)
         return f.t0 + tau, ("absorption" if zero else "corner")
 
-    def _pair_event(self, i):
-        items, n = self.items, len(self.items)
-        if n < 2 or (not self.cyclic and i >= n - 1):
+    def _pair_event(self, a):
+        """Collision time of a and its right neighbour, or inf."""
+        if self._count < 2:
             return math.inf
-        a, b = items[i], items[(i + 1) % n]
-        if not (isinstance(a, Front) and isinstance(b, Front)):
+        b = a.next
+        if b is None or not (isinstance(a, Front) and isinstance(b, Front)):
             return math.inf
-        wrap = self.cyclic and i == n - 1
+        wrap = self.cyclic and b is self._head
         t = self.time
         xa, xb = a.x(t), b.x(t) + (self.g.period if wrap else 0.0)
         closing = a.kappa > b.kappa
@@ -134,28 +206,22 @@ class _TrackerCore:
             return t + self.law.meeting_time(xa, a.sigma(t), a.kappa, xb, b.sigma(t), b.kappa)
         return math.inf
 
-    def _refresh(self, indices):
-        """Recompute cached own events and pair events for the given item indices."""
-        n = len(self.items)
-        if n == 0:
+    def _refresh(self, items):
+        """Recompute cached own events and pair events for these live items."""
+        if self._count == 0:
             return
         seen = set()
-        for i in indices:
-            if self.cyclic:
-                i %= n
-            elif not 0 <= i < n:
+        for item in items:
+            if item is None or id(item) in seen:
                 continue
-            if i in seen:
-                continue
-            seen.add(i)
-            item = self.items[i]
+            seen.add(id(item))
             item.version += 1
             if isinstance(item, Front):
                 item.t_own, item.own_kind = self._own_event(item)
                 if item.t_own < math.inf:
                     heapq.heappush(self._heap, (item.t_own, 1, next(self._seq), item,
                                                 item.version, item.own_kind))
-            item.t_pair = self._pair_event(i)
+            item.t_pair = self._pair_event(item)
             if item.t_pair < math.inf:
                 # Priority 0: at equal times a collision precedes a corner/absorption.
                 heapq.heappush(self._heap, (item.t_pair, 0, next(self._seq), item,
@@ -163,21 +229,15 @@ class _TrackerCore:
 
     def _refresh_all(self):
         self._heap.clear()
-        self._refresh(range(len(self.items)))
+        self._refresh(self._walk())
 
     def _refresh_around(self, objects):
         """Refresh each live object and its left neighbour (whose pair it closes)."""
-        items = self.items
-        indices = []
+        order = []
         for obj in objects:
-            if obj is None:
-                continue
-            try:
-                i = items.index(obj)
-            except ValueError:
-                continue
-            indices.extend((i - 1, i))
-        self._refresh(indices)
+            if obj is not None and self._alive(obj):
+                order.extend((obj.prev, obj))
+        self._refresh(order)
 
     def _drop(self, item):
         item.version += 1  # removes its queued events
@@ -185,7 +245,7 @@ class _TrackerCore:
     def _next_event(self):
         """Earliest valid queued event as (time, kind, item), or (inf, None, None)."""
         heap = self._heap
-        if len(heap) > 8 * len(self.items) + 4096:
+        if len(heap) > 8 * self._count + 4096:
             self._refresh_all()  # compact stale entries
         while heap:
             t, _, _, item, version, kind = heap[0]
@@ -203,8 +263,8 @@ class _TrackerCore:
         if self.record_history:
             self.events.append((self.time, float(x), kind))
 
-    def _corner(self, i):
-        f, g, t = self.items[i], self.g, self.time
+    def _corner(self, f):
+        g, t = self.g, self.time
         self._retire(f, t)
         d = f.direction
         nxt = g.next_cell(f.cell, d)
@@ -220,12 +280,9 @@ class _TrackerCore:
             self._normalize()
         self._refresh_around([f])
 
-    def _absorb(self, i):
-        items, t = self.items, self.time
-        f = items[i]
-        n = len(items)
-        j = (i + f.direction) % n if self.cyclic else i + f.direction
-        iface = items[j]
+    def _absorb(self, f):
+        t = self.time
+        iface = f.next if f.direction > 0 else f.prev
         if not isinstance(iface, Interface):
             raise RuntimeError("front reached a zero of g without meeting its interface")
         self._retire(f, t)
@@ -238,98 +295,100 @@ class _TrackerCore:
             if iface.kR != f.kL:
                 raise RuntimeError("level chain broken at interface")
             iface.kR = f.kR
-        del items[i]
+        self._unlink(f)
         self._drop(f)
-        left_neighbour = items[(items.index(iface) - 1) % len(items)] if f.direction > 0 else iface
+        left_neighbour = iface.prev if f.direction > 0 else iface
         self.counts["absorption"] += 1
         self._log(iface.x, "absorption")
         self._record_interface(iface)
-        before = set(map(id, items))
-        self._settle(items.index(iface))
-        emitted = [item for item in items if id(item) not in before]
+        emitted = self._settle(iface)
         if self.cyclic:
             self._normalize()
         self._refresh_around([left_neighbour, iface, *emitted])
 
-    def _settle(self, j, initial=False):
-        """Enforce the interface condition at items[j] by emitting δ-fans; returns the count."""
+    def _settle(self, iface, initial=False):
+        """Enforce the interface condition at iface by emitting δ-fans.
+
+        Returns the emitted fronts in spatial order (left fan, then right fan).
+        """
         if not self.enforce_interface:
-            return 0
-        iface, g, t = self.items[j], self.g, self.time
-        emitted = 0
+            return []
+        g, t = self.g, self.time
+        left, right = [], []
         key = "initial_emission" if initial else "emission"
         if iface.kR > 0:
             c = iface.right_cell
-            fronts = [Front(a, b, self.flux.kappa(a, b), c, t, float(g.left[c]), 0.0, float(g.alpha[c]),
-                            law=self.law)
-                      for a, b in solve_riemann(0, iface.kR)]
+            right = [Front(a, b, self.flux.kappa(a, b), c, t, float(g.left[c]), 0.0, float(g.alpha[c]),
+                           law=self.law)
+                     for a, b in solve_riemann(0, iface.kR)]
             iface.accrue(t, self.flux.delta)
             iface.kR = 0
-            self.items[j + 1:j + 1] = fronts
-            emitted += len(fronts)
+            self._insert_after(iface, right)
             self.counts[key] += 1
         if iface.kL < 0:
             c = iface.left_cell
-            fronts = [Front(a, b, self.flux.kappa(a, b), c, t, float(g.right[c]), 0.0, float(g.alpha[c]),
-                            law=self.law)
-                      for a, b in solve_riemann(iface.kL, 0)]
+            left = [Front(a, b, self.flux.kappa(a, b), c, t, float(g.right[c]), 0.0, float(g.alpha[c]),
+                          law=self.law)
+                    for a, b in solve_riemann(iface.kL, 0)]
             iface.accrue(t, self.flux.delta)
             iface.kL = 0
-            self.items[j:j] = fronts
-            emitted += len(fronts)
+            self._insert_before(iface, left)
             self.counts[key] += 1
-        if emitted:
+        if left or right:
             self._log(iface.x, "emission")
             self._record_interface(iface)
-        return emitted
+        return left + right
 
     def _record_interface(self, iface):
         self.interface_log.append((self.time, iface.x, iface.kL, iface.kR))
 
-    def _lifted(self, k, t):
-        """Position of item k at time t; on a circle, k may be any integer.
+    def _collide(self, a):
+        """Replace the cluster around a and its right neighbour by one Riemann fan.
 
-        The cyclic list is sorted on the chart, so item k lies on the lift
-        x(items[k mod n]) + (k div n)·L. Zero-width arcs therefore stay zero
-        width, and the wrap gap keeps its full length even when every front is
-        at one point.
+        Positions are compared on one lift. On the circle, stepping right onto
+        the head adds L and stepping left off it subtracts L, as item k of the
+        old cyclic list sat at x(items[k mod n]) + (k div n)·L.
         """
-        n = len(self.items)
-        item = self.items[k % n] if self.cyclic else self.items[k]
-        x = item.x(t) if isinstance(item, Front) else item.x
-        return x + (k // n) * self.g.period if self.cyclic else x
+        t, g, n, cyclic = self.time, self.g, self._count, self.cyclic
+        period = g.period
 
-    def _collide(self, i):
-        items, t, g = self.items, self.time, self.g
-        n = len(items)
-        a, b = items[i], items[(i + 1) % n]
-        x = 0.5 * (self._lifted(i, t) + self._lifted(i + 1, t))
+        def lifted(item, shift):
+            x = item.x(t) if isinstance(item, Front) else item.x
+            return x + shift if cyclic else x
+
+        b = a.next
+        first, last = a, b
+        first_shift, last_shift = 0.0, (period if cyclic and b is self._head else 0.0)
+        x = 0.5 * (lifted(first, first_shift) + lifted(last, last_shift))
         s_event = 0.5 * (a.sigma(t) + b.sigma(t))
         tol = self._tol(x)
-        first, last = i, i + 1
-        while last - first + 1 < n:
-            k = first - 1
-            if (not self.cyclic and k < 0) or not isinstance(items[k % n], Front):
+        size = 2
+        while size < n:
+            k = first.prev
+            if k is None or not isinstance(k, Front):
                 break
-            if abs(self._lifted(k, t) - x) > tol:
+            shift = first_shift - period if cyclic and first is self._head else first_shift
+            if abs(lifted(k, shift) - x) > tol:
                 break
-            first = k
-        while last - first + 1 < n:
-            k = last + 1
-            if (not self.cyclic and k >= n) or not isinstance(items[k % n], Front):
+            first, first_shift, size = k, shift, size + 1
+        while size < n:
+            k = last.next
+            if k is None or not isinstance(k, Front):
                 break
-            if abs(self._lifted(k, t) - x) > tol:
+            shift = last_shift + period if cyclic and k is self._head else last_shift
+            if abs(lifted(k, shift) - x) > tol:
                 break
-            last = k
-        members = [items[k % n] for k in range(first, last + 1)]
-        kL, kR = members[0].kL, members[-1].kR
-        left_neighbour = None
-        if len(members) < n and (self.cyclic or first > 0):
-            left_neighbour = items[(first - 1) % n]
+            last, last_shift, size = k, shift, size + 1
+        members = [first]
+        while members[-1] is not last:
+            members.append(members[-1].next)
+        kL, kR = first.kL, last.kR
+        left_neighbour = first.prev if size < n else None
+        before, after = first.prev, last.next
         for m in members:
             self._retire(m, t)
             self._drop(m)
-        if self.cyclic:
+        if cyclic:
             x = float(g.wrap(x))
         hint = g.cell_of(x)
         outgoing = self._new_fronts(x, kL, kR, t, hint, s_event)
@@ -337,14 +396,25 @@ class _TrackerCore:
         if len(outgoing) > 1:
             self.counts["multi_front_collision"] += 1
         self._log(x, "collision")
-        if self.cyclic and (first < 0 or last >= n):
-            start = first % n
-            items[:] = items[start:] + items[:start]
-            first, last = 0, len(members) - 1
-        items[first:last + 1] = outgoing
-        if not items:
+        # Relink only around the cluster. A cluster crossing the circle's seam
+        # puts its fan first in the order, as the old list rotation did.
+        crosses_seam = first_shift != 0.0 or last_shift != 0.0
+        head_inside = crosses_seam or first is self._head
+        for m in members:
+            m.prev = m.next = None
+        if cyclic and size == n:
+            # The whole circle collided: the fan (possibly empty) is all there is.
+            self._chain([*outgoing, *outgoing[:1]])
+            self._head = outgoing[0] if outgoing else None
+        else:
+            self._chain([before, *outgoing, after])
+            if head_inside:
+                self._head = outgoing[0] if outgoing else after
+        self._count += len(outgoing) - size
+        self._items = None
+        if not self._count:
             self._constant_level = kL
-        if self.cyclic:
+        if cyclic:
             self._normalize()
         self._refresh_around([left_neighbour, *outgoing])
 
@@ -370,13 +440,13 @@ class _TrackerCore:
                 raise RuntimeError("Event limit reached; inspect data or raise max_events")
             self.time = max(self.time, t_event)
             heapq.heappop(self._heap)
-            i = self.items.index(item)
+            # The queue entry names its item: no search is needed to find it.
             if kind == "collision":
-                self._collide(i)
+                self._collide(item)
             elif kind == "corner":
-                self._corner(i)
+                self._corner(item)
             else:
-                self._absorb(i)
+                self._absorb(item)
             self.event_count += 1
 
     # ------------------------------------------------------------- queries
@@ -582,15 +652,17 @@ class HeteroFrontTracker(_TrackerCore):
         between = [level_at(0.5 * (u + v)) for u, v in zip(points[:-1], points[1:])]
         interval_levels = [levels[0], *between, levels[-1]]
         zero_set = set(zeros.tolist())
+        items = []
         for j, x in enumerate(points):
             kL, kR = interval_levels[j], interval_levels[j + 1]
             if float(x) in zero_set:
-                self.items.append(self._make_interface(x, kL, kR))
-                self._record_interface(self.items[-1])
+                items.append(self._make_interface(x, kL, kR))
+                self._record_interface(items[-1])
             elif kL != kR:
-                self.items.extend(self._new_fronts(float(x), kL, kR, 0.0, self.g.cell_of(x)))
+                items.extend(self._new_fronts(float(x), kL, kR, 0.0, self.g.cell_of(x)))
+        self._link(items)
         for iface in self.interfaces:
-            self._settle(self.items.index(iface), initial=True)
+            self._settle(iface, initial=True)
         self._refresh_all()
 
     @classmethod
