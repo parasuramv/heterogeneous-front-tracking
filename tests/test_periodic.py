@@ -7,6 +7,7 @@ import numpy as np
 from hetfront import Circle, MultiplicativeFlux, PeriodicHeteroFrontTracker, PiecewiseAffine
 
 from . import _oracles
+from .test_solver import assert_links
 
 
 def run_checks(test, tracker, times, *, budget=True, tol=1e-12):
@@ -85,6 +86,17 @@ class SignChangingCircleTests(unittest.TestCase):
         run_checks(self, tracker, np.linspace(0.1, 5, 50), tol=1e-11)
         self.assertGreater(tracker.counts["absorption"], 0)
         self.assertEqual(tracker.counts["emission"], 0)
+
+    def test_links_stay_cyclic_through_seams_and_absorptions(self):
+        g = PiecewiseAffine.from_function(lambda x: np.sin(2 * np.pi * x) + 0.3 * np.sin(6 * np.pi * x),
+                                          np.linspace(0, 1, 25)[:-1], period=1.0)
+        tracker = PeriodicHeteroFrontTracker.from_function(MultiplicativeFlux(g, 0.02),
+                                                           lambda x: np.sin(2 * np.pi * x), cells=80)
+        for t in (0.05, 0.3, 1.0, 3.0):
+            tracker.run(t)
+            assert_links(self, tracker)
+        self.assertGreater(tracker.counts["absorption"], 10)
+        self.assertGreater(tracker.counts["collision"], 10)
 
     def test_interface_layer_on_circle(self):
         g = PiecewiseAffine.from_function(lambda x: np.sin(2 * np.pi * x),

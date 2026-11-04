@@ -81,17 +81,19 @@ class PeriodicHeteroFrontTracker(_TrackerCore):
         ends = np.append(points[1:], points[0] + L)
         arcs = [level_at(float(self.domain.wrap(0.5 * (a + b)))) for a, b in zip(points, ends)]
         zero_set = set(zeros.tolist())
+        items = []
         for j, x in enumerate(points):
             kL, kR = arcs[j - 1], arcs[j]
             if float(x) in zero_set:
-                self.items.append(self._make_interface(x, kL, kR))
-                self._record_interface(self.items[-1])
+                items.append(self._make_interface(x, kL, kR))
+                self._record_interface(items[-1])
             elif kL != kR:
-                self.items.extend(self._new_fronts(float(x), kL, kR, 0.0, g.cell_of(x)))
-        if not self.items:
+                items.extend(self._new_fronts(float(x), kL, kR, 0.0, g.cell_of(x)))
+        self._link(items)
+        if not items:
             self._constant_level = arcs[0]
         for iface in self.interfaces:
-            self._settle(self.items.index(iface), initial=True)
+            self._settle(iface, initial=True)
         self._normalize()
         self._refresh_all()
 
@@ -113,19 +115,19 @@ class PeriodicHeteroFrontTracker(_TrackerCore):
     # --------------------------------------------------------- cyclic order
     def _normalize(self):
         """Rotate so canonical positions increase from the largest cyclic descent."""
-        items = self.items
-        if len(items) < 2:
+        if self._count < 2:
             return False
         pos = self.positions()
         descents = np.roll(pos, 1) - pos  # descents[i] = x[i-1] - x[i]
         start = int(np.argmax(descents))
         if start == 0:
             return False
-        old_last = items[-1]
-        items[:] = items[start:] + items[:start]
+        old_last = self._head.prev
+        self._head = self.items[start]
+        self._items = None
         # Rotation keeps adjacency; only the wrap pair changes, so refresh the
         # former and the new last items (their pair events depend on wrapping).
-        self._refresh_around([old_last, items[-1]])
+        self._refresh_around([old_last, self._head.prev])
         return True
 
     # --------------------------------------------------------------- queries
