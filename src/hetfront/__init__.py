@@ -11,6 +11,8 @@ Public API (read the modules in this order):
 - ``PiecewiseAffine``      (heterogeneity.py)  g_Δ on the line or a circle
 - ``MultiplicativeFlux``   (flux.py)           g_Δ |u|^p with flux levels θ = kδ
 - ``trajectory``, ``PowerLaw`` (trajectory.py) closed-form front laws
+- ``GeneralLaw``, ``nonlinearity`` (trajectory.py, nonlinearity.py) general convex h
+  with the Osgood tail; per-cell laws only, not yet wired into the trackers
 - ``solve_riemann``        (riemann.py)        shock or δ-fan between levels
 - ``Front``, ``Interface`` (fronts.py)
 - ``HeteroFrontTracker``   (solver.py)         whole-line driver
@@ -25,10 +27,12 @@ from .solver import HeteroFrontTracker, Piece
 from .domains import Circle
 from .periodic import PeriodicHeteroFrontTracker
 from . import trajectory
-from .trajectory import PowerLaw
+from .trajectory import PowerLaw, GeneralLaw
+from . import nonlinearity
 
 __version__ = "0.1.0"
 __all__ = [
     "PiecewiseAffine", "MultiplicativeFlux", "solve_riemann", "Front", "Interface",
     "HeteroFrontTracker", "Piece", "Circle", "PeriodicHeteroFrontTracker", "trajectory", "PowerLaw",
+    "GeneralLaw", "nonlinearity",
 ]

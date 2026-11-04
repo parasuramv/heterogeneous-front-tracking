@@ -13,7 +13,10 @@ that never divide by α, so flat cells (α = 0) need no special case.
 
 The module functions are the quadratic case h(u) = u². ``PowerLaw`` gives the
 same laws for h(u) = |u|^p, p > 1, with σ = |g_Δ|^{(p-1)/p}; for p = 2 it
-calls the module functions unchanged.
+calls the module functions unchanged. ``GeneralLaw`` covers general convex
+h with the Osgood tail ∫^∞ dr/h < ∞ (``nonlinearity``). Arrival times stay
+in closed form; positions at a given time and meeting times become monotone
+scalar roots, since only power laws admit a straightening coordinate.
 """
 
 import math
@@ -216,3 +219,325 @@ class PowerLaw:
 
 
 QUADRATIC = PowerLaw(2.0)
+
+
+# ---------------------------------------------------------------------------
+# General convex h: closed-form arrival times, monotone root solves.
+# ---------------------------------------------------------------------------
+
+def _monotone_root(F, lo, hi, f_lo=None, f_hi=None):
+    """Root of a monotone F on [lo, hi] with F(lo) ≤ 0 ≤ F(hi) (Illinois + bisection).
+
+    lo may exceed hi (a decreasing direction); the bracket is shrunk until
+    it is a few ulps wide or F vanishes. Returns the end with |F| smallest.
+    """
+    f_lo = F(lo) if f_lo is None else f_lo
+    f_hi = F(hi) if f_hi is None else f_hi
+    if f_lo == 0.0:
+        return lo
+    if f_hi == 0.0:
+        return hi
+    side = 0
+    for _ in range(300):
+        width = abs(hi - lo)
+        if width <= 4.0 * math.ulp(max(abs(lo), abs(hi))):
+            break
+        x = (lo * f_hi - hi * f_lo) / (f_hi - f_lo)
+        if not (min(lo, hi) < x < max(lo, hi)) or side == 3 or side == -3:
+            x, side = 0.5 * (lo + hi), 0
+        fx = F(x)
+        if fx == 0.0:
+            return x
+        if fx < 0.0:
+            lo, f_lo = x, fx
+            if side < 0:
+                f_hi *= 0.5
+            side = side - 1 if side <= 0 else -1
+        else:
+            hi, f_hi = x, fx
+            if side > 0:
+                f_lo *= 0.5
+            side = side + 1 if side >= 0 else 1
+    return lo if abs(f_lo) <= abs(f_hi) else hi
+
+
+class FrontCoef(tuple):
+    """(θ_L, θ_R, |θ_R| - |θ_L|, direction) of one front or characteristic (θ_L = θ_R)."""
+
+    __slots__ = ()
+
+    def __new__(cls, thL, thR):
+        thL, thR = float(thL), float(thR)
+        dabs = abs(thR) - abs(thL)
+        if thL == thR:
+            direction = (thL > 0) - (thL < 0)
+        else:
+            ratio = dabs / (thR - thL)
+            direction = (ratio > 0) - (ratio < 0)
+        return tuple.__new__(cls, (thL, thR, dabs, direction))
+
+    thL = property(lambda self: self[0])
+    thR = property(lambda self: self[1])
+    dabs = property(lambda self: self[2])
+    direction = property(lambda self: self[3])
+
+    @property
+    def characteristic(self):
+        return self[0] == self[1]
+
+
+class GeneralLaw:
+    """Front laws for f = g_Δ(x) h(u) with a general convex ``Nonlinearity`` h.
+
+    The anchor coordinate is γ = |g_Δ| itself (``sigma_of`` is the identity),
+    affine on a cell with slope α. With H = h⁻¹, J(u) = ∫_u^∞ dr/h and
+    Q(u) = u + h(u)J(u), the profile primitive P(θ, γ) = γ Q(H(θ/γ)) gives
+
+        ∂_γ P = H(θ/γ)  (the state),   ∂_θ P = J(u),   ∂_θ∂_γ P = 1/(γ h'(u)).
+
+    A front (θ_L, θ_R) has slowness S = dt/dx = [H(θ/γ)]/[|θ|]. Its
+    γ-antiderivative is L = (P(θ_R, γ) - P(θ_L, γ))/[|θ|], so
+
+        α (t1 - t0) = L(γ1) - L(γ0).
+
+    A characteristic has S = 1/(γ h'(u)) and L = sgn θ · J(u). For h = |u|^p,
+    L ∝ σ = γ^{1-1/p}, which is ``PowerLaw``. In general no single coordinate
+    straightens all fronts (that requires h'(u) = c h(u)^r, i.e. a power law),
+    so arrival times at a given point are explicit, while positions at a given
+    time and meeting times are monotone scalar roots. Times are computed as
+    (x1 - x0) times a mean slowness, with no division by α: a closed form when
+    γ0 and γ1 are far apart, and Gauss–Legendre on the smooth S otherwise.
+
+    The front coefficient is a ``FrontCoef`` built by ``coef(θ_L, θ_R)``.
+    """
+
+    quadratic = False
+
+    def __init__(self, nonlinearity):
+        from .nonlinearity import parse
+        self.h = parse(nonlinearity).validate()
+
+    def __eq__(self, other):
+        return isinstance(other, GeneralLaw) and other.h == self.h
+
+    def __hash__(self):
+        return hash(("GeneralLaw", self.h))
+
+    def __repr__(self):
+        return f"GeneralLaw({self.h!r})"
+
+    @staticmethod
+    def coef(thL, thR):
+        return FrontCoef(thL, thR)
+
+    @staticmethod
+    def direction(coef):
+        return coef.direction
+
+    # -------------------------------------------------------------- σ ≡ γ
+    @staticmethod
+    def sigma_of(absg):
+        return np.array(absg, dtype=float) if np.ndim(absg) else float(absg)
+
+    def state(self, theta, gamma):
+        """|u| = H(|θ|/γ) on the profile of level θ where |g_Δ| = γ (inf at γ = 0)."""
+        if theta == 0.0:
+            return 0.0
+        if gamma <= 0.0:
+            return math.inf
+        return self.h.inverse(abs(theta) / gamma)
+
+    def speed(self, coef, gamma):
+        """ẋ at |g_Δ| = γ (0 for a stationary front)."""
+        s = self.slowness(coef, gamma)
+        return 0.0 if math.isinf(s) else 1.0 / s
+
+    def closing(self, ca, cb, gamma):
+        """True if front a (left) is faster than front b (right).
+
+        The order of the secant speeds at a common γ does not depend on γ,
+        because H is monotone and h is convex, so any γ on the cell decides.
+        """
+        return self.speed(ca, gamma) > self.speed(cb, gamma)
+
+    # ------------------------------------------------ slowness and its primitive
+    def slowness(self, coef, gamma):
+        """S = dt/dx at |g_Δ| = γ > 0 (signed; ±inf for a stationary front)."""
+        thL, thR, dabs, direction = coef
+        if direction == 0:
+            return math.inf
+        h = self.h
+        if thL == thR:
+            return direction / (gamma * h.dh(self.state(thL, gamma)))
+        if thL * thR >= 0.0:
+            a, b = self.state(thL, gamma), self.state(thR, gamma)
+            sign = 1.0 if thL + thR > 0 else -1.0
+            return sign / (gamma * h.dd(a, b))
+        uR = math.copysign(self.state(thR, gamma), thR)
+        uL = math.copysign(self.state(thL, gamma), thL)
+        return (uR - uL) / dabs
+
+    def primitive(self, coef, gamma):
+        """L(γ) with dL/dγ = S and L(0) = 0, so that α Δt = ΔL."""
+        if gamma <= 0.0:
+            return 0.0
+        thL, thR, dabs, direction = coef
+        h = self.h
+        if thL == thR:
+            return direction * h.osgood(self.state(thL, gamma)) if thL else 0.0
+        if thL * thR >= 0.0:
+            a, b = self.state(thL, gamma), self.state(thR, gamma)
+            sign = 1.0 if thL + thR > 0 else -1.0
+            return sign * h.q_divided(a, b) / h.dd(a, b)
+        qR = math.copysign(h.q_function(self.state(thR, gamma)), thR)
+        qL = math.copysign(h.q_function(self.state(thL, gamma)), thL)
+        return gamma * (qR - qL) / dabs if dabs else math.copysign(math.inf, qR - qL)
+
+    def mean_slowness(self, coef, g0, g1):
+        """Mean of S over γ between g0 and g1 (equivalently over x on one cell)."""
+        if g0 == g1:
+            return self.slowness(coef, g0)
+        lo, hi = (g0, g1) if g0 < g1 else (g1, g0)
+        if lo <= 0.0 or hi > 2.0 * lo:
+            return (self.primitive(coef, g1) - self.primitive(coef, g0)) / (g1 - g0)
+        values = [self.slowness(coef, lo + (hi - lo) * float(s)) for s in _gl_unit()[0]]
+        return math.fsum(w * v for w, v in zip(_gl_unit()[1].tolist(), values))
+
+    # -------------------------------------------------------------- front laws
+    def travel_time(self, x0, s0, x1, s1, coef):
+        """Time to move from (x0, γ0) to (x1, γ1) in one cell, or inf."""
+        if x1 == x0:
+            return 0.0
+        if coef.direction == 0 or (x1 - x0) * coef.direction < 0:
+            return math.inf
+        tau = (x1 - x0) * self.mean_slowness(coef, s0, s1)
+        return tau if tau >= 0.0 else math.inf
+
+    def _zero_location(self, x0, s0, alpha, direction):
+        """Where γ reaches 0 along the direction of motion, or None."""
+        if alpha == 0.0 or alpha * direction >= 0.0:
+            return None
+        return x0 - s0 / alpha
+
+    def position(self, x0, s0, alpha, coef, tau):
+        """x after time tau from anchor (x0, γ0), by a monotone root solve.
+
+        Arrays of tau are evaluated elementwise. A front that reaches a zero
+        of g_Δ stays there, as σ is clamped at 0 in ``PowerLaw``.
+        """
+        if np.ndim(tau):
+            return np.array([self.position(x0, s0, alpha, coef, float(t)) for t in np.ravel(tau)]
+                            ).reshape(np.shape(tau))
+        d = coef.direction
+        if tau <= 0.0 or d == 0:
+            return x0
+        if alpha == 0.0:
+            return x0 + tau / self.slowness(coef, s0)
+
+        def gamma(x):
+            value = s0 + alpha * (x - x0)
+            return value if value > 0.0 else 0.0
+
+        def F(x):
+            return self.travel_time(x0, s0, x, gamma(x), coef) - tau
+
+        z = self._zero_location(x0, s0, alpha, d)
+        if z is not None:
+            f_z = F(z)
+            if f_z <= 0.0:
+                return z
+            far, f_far = z, f_z
+        else:
+            step = tau / abs(self.slowness(coef, s0))
+            far = x0 + d * step
+            f_far = F(far)
+            for _ in range(200):
+                if f_far >= 0.0:
+                    break
+                step *= 2.0
+                far = x0 + d * step
+                f_far = F(far)
+        return _monotone_root(F, x0, far, -tau, f_far)
+
+    def sigma(self, s0, alpha, coef, tau, x0=0.0):
+        """γ after time tau from anchor γ0 (never negative within a cell)."""
+        x = self.position(x0, s0, alpha, coef, tau)
+        value = s0 + alpha * (np.asarray(x) - x0)
+        return np.maximum(value, 0.0) if np.ndim(value) else max(float(value), 0.0)
+
+    def meeting_time(self, xa, sa, ca, xb, sb, cb, alpha, x_end=None):
+        """Waiting time until front a (left) meets front b (right) in one cell, or inf.
+
+        For fronts closing at a common γ, D(x) = T_a(x) - T_b(x) is strictly
+        monotone along the common path, so the meeting point is a bracketed
+        root. ``x_end`` is the cell end in the direction of a common motion;
+        a meeting beyond it, or beyond a zero of g_Δ, returns inf (the corner
+        or absorption comes first).
+        """
+        if not self.closing(ca, cb, sa if sa > 0.0 else sb):
+            return math.inf
+        if xb - xa <= 0.0:
+            return 0.0
+        da, db = ca.direction, cb.direction
+
+        def gamma(x):
+            value = sa + alpha * (x - xa)
+            return value if value > 0.0 else 0.0
+
+        def Ta(x):
+            return self.travel_time(xa, sa, x, gamma(x), ca)
+
+        def Tb(x):
+            return self.travel_time(xb, sb, x, gamma(x), cb)
+
+        if da == 0:
+            return Tb(xa)
+        if db == 0:
+            return Ta(xb)
+        if da > 0 > db:
+            x = _monotone_root(lambda y: Ta(y) - Tb(y), xa, xb, -Tb(xa), Ta(xb))
+            return 0.5 * (Ta(x) + Tb(x))
+        # Common direction d: the leader is b for d > 0 and a for d < 0.
+        d = da
+        lead_x, lead_s = (xb, sb) if d > 0 else (xa, sa)
+        lag = Ta if d > 0 else Tb
+        lead = Tb if d > 0 else Ta
+
+        def D(y):  # lead time minus lag time: negative at the leader, increasing ahead of it
+            return lead(y) - lag(y)
+
+        stop = self._zero_location(lead_x, lead_s, alpha, d)
+        if x_end is not None:
+            stop = x_end if stop is None else (min(stop, x_end) if d > 0 else max(stop, x_end))
+        if stop is not None:
+            d_stop = D(stop)
+            if d_stop < 0.0:
+                return math.inf
+        else:
+            step = abs(xb - xa)
+            stop, d_stop = lead_x + d * step, D(lead_x + d * step)
+            for _ in range(200):
+                if d_stop >= 0.0:
+                    break
+                step *= 2.0
+                stop = lead_x + d * step
+                d_stop = D(stop)
+            else:
+                return math.inf
+        x = _monotone_root(D, lead_x, stop, D(lead_x), d_stop)
+        return 0.5 * (Ta(x) + Tb(x))
+
+    def characteristic_coef(self, theta):
+        return FrontCoef(theta, theta)
+
+    def sample_path(self, x0, s0, alpha, coef, t0, t1, samples=24):
+        """Points (x, t) along one piece, uniform in x, with t explicit (no root solves)."""
+        x1 = self.position(x0, s0, alpha, coef, t1 - t0)
+        xs = np.linspace(x0, x1, max(2, int(samples)))
+        ts = [t0 + self.travel_time(x0, s0, x, max(s0 + alpha * (x - x0), 0.0), coef) for x in xs]
+        return xs, np.minimum(np.asarray(ts, dtype=float), t1)
+
+
+def _gl_unit():
+    from .nonlinearity import _GL_X, _GL_W
+    return _GL_X, _GL_W
