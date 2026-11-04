@@ -138,6 +138,20 @@ class PowerLaw:
     def __repr__(self):
         return f"PowerLaw(p={self.p:g})"
 
+    # ----------------------------------------------- coefficient interface
+    # The tracker treats a front's coefficient as opaque and asks the law for
+    # its direction and for the closing test. Here the coefficient is the
+    # scalar K, and both questions are its sign and order.
+    @staticmethod
+    def direction(kappa):
+        """Sign of the front's motion, constant along it: sgn K."""
+        return (kappa > 0) - (kappa < 0)
+
+    @staticmethod
+    def closing(ka, kb, gamma=None):
+        """True if front a (left) moves faster than front b (right): K_a > K_b."""
+        return ka > kb
+
     # ------------------------------------------------------------ σ and M
     def sigma_of(self, absg):
         """σ = |g|^q from |g| (scalar or array)."""
@@ -187,9 +201,11 @@ class PowerLaw:
         tau = (x1 - x0) / denominator
         return tau if tau >= 0.0 else math.inf
 
-    def meeting_time(self, xa, sa, ka, xb, sb, kb):
+    def meeting_time(self, xa, sa, ka, xb, sb, kb, alpha=None, bounds=None):
         """Waiting time until front a (left) meets front b (right) in one cell.
 
+        ``alpha`` and ``bounds`` (the cell's slope and ends) are part of the
+        common law interface; straight fronts in σ do not need them.
         σ is monotone in x on the cell and linear in t along each front, so
         τ = (σ_b - σ_a)/(q α (K_a - K_b)) = (x_b - x_a)/(M(σ_a, σ_b)(K_a - K_b)).
         """
@@ -448,7 +464,8 @@ class GeneralLaw:
                 return z
             far, f_far = z, f_z
         else:
-            step = tau / abs(self.slowness(coef, s0))
+            slow = abs(self.slowness(coef, s0)) if s0 > 0.0 else math.nan
+            step = tau / slow if 0.0 < slow < math.inf else tau
             far = x0 + d * step
             f_far = F(far)
             for _ in range(200):
@@ -465,14 +482,14 @@ class GeneralLaw:
         value = s0 + alpha * (np.asarray(x) - x0)
         return np.maximum(value, 0.0) if np.ndim(value) else max(float(value), 0.0)
 
-    def meeting_time(self, xa, sa, ca, xb, sb, cb, alpha, x_end=None):
+    def meeting_time(self, xa, sa, ca, xb, sb, cb, alpha, bounds=None):
         """Waiting time until front a (left) meets front b (right) in one cell, or inf.
 
         For fronts closing at a common γ, D(x) = T_a(x) - T_b(x) is strictly
         monotone along the common path, so the meeting point is a bracketed
-        root. ``x_end`` is the cell end in the direction of a common motion;
-        a meeting beyond it, or beyond a zero of g_Δ, returns inf (the corner
-        or absorption comes first).
+        root. ``bounds`` = (left, right) are the cell's ends; a meeting beyond
+        the end in the direction of a common motion, or beyond a zero of g_Δ,
+        returns inf (the corner or absorption comes first).
         """
         if not self.closing(ca, cb, sa if sa > 0.0 else sb):
             return math.inf
@@ -507,6 +524,10 @@ class GeneralLaw:
             return lead(y) - lag(y)
 
         stop = self._zero_location(lead_x, lead_s, alpha, d)
+        x_end = None
+        if bounds is not None:
+            x_end = float(bounds[1] if d > 0 else bounds[0])
+            x_end = x_end if math.isfinite(x_end) else None
         if x_end is not None:
             stop = x_end if stop is None else (min(stop, x_end) if d > 0 else max(stop, x_end))
         if stop is not None:

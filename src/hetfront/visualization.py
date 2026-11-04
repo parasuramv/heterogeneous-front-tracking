@@ -179,7 +179,7 @@ def front_lines(pieces, samples=24, power=2.0):
     for p in pieces:
         if p.t1 <= p.t0:
             continue
-        n = 2 if p.alpha == 0.0 or p.kappa == 0.0 else samples
+        n = 2 if p.alpha == 0.0 or law.direction(p.kappa) == 0 else samples
         xs, ts = law.sample_path(p.x0, p.s0, p.alpha, p.kappa, p.t0, p.t1, n)
         lines.append(np.column_stack((xs, ts)))
     return lines

@@ -1,4 +1,4 @@
-> **Status (phase 1 done):** `nonlinearity.py` (`Power`, `AbsPolynomial`, `Custom`, `parse`) and `trajectory.GeneralLaw` with `tests/test_general.py`. The trackers still use `PowerLaw` only; phases 2–5 below remain.
+> **Status (phases 1–2 done):** `nonlinearity.py` and `trajectory.GeneralLaw` (phase 1). The tracker now treats a front's `kappa` as opaque, asking its law for `direction(kappa)` and `closing(ka, kb, γ)`, and passes the cell's slope and ends to `meeting_time` (phase 2). The PowerLaw path is bit-identical on every example at p = 3/2, 2, 3. A test-only flux shim drives `HeteroFrontTracker` and `PeriodicHeteroFrontTracker` with `GeneralLaw`. It reproduces PowerLaw counts and levels exactly, with positions within 1e-10, and keeps every invariant for u²+u⁴ and u²+|u|³. Open for phase 3: `MultiplicativeFlux(h=...)`, integrals, characteristics, and speed. The generic path costs about 20–30 ms per event for u²+u⁴, about 400× PowerLaw, mostly the Osgood quadrature inside root solves.
 
 # Plan: general convex multiplicative fluxes `g(x) h(u)`
 

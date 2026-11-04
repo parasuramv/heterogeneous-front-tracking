@@ -72,16 +72,17 @@ class _TrackerCore:
     def _place(self, x, kappa, cell, s_hint=None):
         """Choose the cell a new front at x enters, snapping to nodes within tolerance."""
         g, flux = self.g, self.flux
+        d = self.law.direction(kappa)
         tol = self._tol(x)
         lo, hi = g.left[cell], g.right[cell]
         if hi != math.inf and abs(hi - x) <= tol:
-            if kappa > 0 and not g.zero_right[cell]:
+            if d > 0 and not g.zero_right[cell]:
                 nxt = g.next_cell(cell, 1)
                 if nxt is not None:
                     return nxt, float(g.left[nxt]), float(flux.sigma_left[nxt])
             return cell, float(hi), float(flux.sigma_right[cell])
         if lo != -math.inf and abs(x - lo) <= tol:
-            if kappa < 0 and not g.zero_left[cell]:
+            if d < 0 and not g.zero_left[cell]:
                 prv = g.next_cell(cell, -1)
                 if prv is not None:
                     return prv, float(g.right[prv]), float(flux.sigma_right[prv])
@@ -105,10 +106,11 @@ class _TrackerCore:
 
     # --------------------------------------------------------- event times
     def _own_event(self, f):
-        if f.kappa == 0.0:
+        d = f.direction
+        if d == 0:
             return math.inf, ""
         g, flux, c = self.g, self.flux, f.cell
-        if f.kappa > 0:
+        if d > 0:
             target, s_target, zero = g.right[c], flux.sigma_right[c], g.zero_right[c]
         else:
             target, s_target, zero = g.left[c], flux.sigma_left[c], g.zero_left[c]
@@ -127,11 +129,16 @@ class _TrackerCore:
         wrap = self.cyclic and i == n - 1
         t = self.time
         xa, xb = a.x(t), b.x(t) + (self.g.period if wrap else 0.0)
-        closing = a.kappa > b.kappa
+        sa, sb = a.sigma(t), b.sigma(t)
+        # Closing is decided at any common anchor value: the speed order is
+        # independent of the position on the cell for every law.
+        closing = self.law.closing(a.kappa, b.kappa, sa if sa > sb else sb)
         if closing and xb - xa <= self._tol(xa):
             return t
-        if a.cell == b.cell and not wrap:
-            return t + self.law.meeting_time(xa, a.sigma(t), a.kappa, xb, b.sigma(t), b.kappa)
+        if closing and a.cell == b.cell and not wrap:
+            g, c = self.g, a.cell
+            return t + self.law.meeting_time(xa, sa, a.kappa, xb, sb, b.kappa,
+                                             a.alpha, (g.left[c], g.right[c]))
         return math.inf
 
     def _refresh(self, indices):
@@ -665,10 +672,11 @@ class HeteroFrontTracker(_TrackerCore):
 
         for p in self.pieces_until():
             c, jump = p.cell, p.kR - p.kL
-            if p.kappa == 0.0:
+            d = law.direction(p.kappa)
+            if d == 0:
                 if p.x0 < x:
                     active(p.t0, p.t1, jump)
-            elif p.kappa > 0:
+            elif d > 0:
                 # Left of x until it reaches x, if x lies in its cell.
                 if p.x0 < x:
                     end = p.t1

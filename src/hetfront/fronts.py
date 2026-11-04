@@ -16,7 +16,12 @@ from .trajectory import QUADRATIC
 
 @dataclass(slots=True, eq=False)
 class Front:
-    """Jump from level kL to kR moving with ẋ = |g|^{1/p} κ inside ``cell`` (σκ for p = 2)."""
+    """Jump from level kL to kR moving with ẋ = |g|^{1/p} κ inside ``cell`` (σκ for p = 2).
+
+    ``kappa`` is the law's front coefficient: the scalar K for ``PowerLaw``,
+    a ``FrontCoef`` for ``GeneralLaw``. ``s0`` is the law's anchor coordinate
+    (σ0, or γ0 = |g_Δ| for ``GeneralLaw``).
+    """
 
     kL: int
     kR: int
@@ -41,7 +46,8 @@ class Front:
 
     @property
     def direction(self):
-        return (self.kappa > 0) - (self.kappa < 0)
+        """Sign of the motion; ``kappa`` is opaque to everything but ``law``."""
+        return self.law.direction(self.kappa)
 
 
 @dataclass(slots=True, eq=False)

@@ -205,5 +205,93 @@ class GeneralLawTests(unittest.TestCase):
         self.assertTrue(FrontCoef(0.4, 0.4).characteristic)
 
 
+
+# ---------------------------------------------------------------------------
+# The tracker's law interface (phase 2): GeneralLaw driven through the solver.
+# ---------------------------------------------------------------------------
+from hetfront import HeteroFrontTracker, MultiplicativeFlux, PeriodicHeteroFrontTracker, PiecewiseAffine  # noqa: E402
+
+
+class _GeneralLawFlux(MultiplicativeFlux):
+    """Test shim: a MultiplicativeFlux whose fronts use GeneralLaw (anchor γ = |g_Δ|).
+
+    Only the tracker-facing pieces are replaced; level maps keep ``power``, so
+    the shim is physical only for h = |u|^power or when data are given as levels.
+    """
+
+    def __init__(self, g, delta, nonlinearity, power=2.0):
+        super().__init__(g, delta, power)
+        self.law = GeneralLaw(nonlinearity)
+        self.sigma_left, self.sigma_right = g.absg_left, g.absg_right
+
+    def kappa(self, kL, kR):
+        return self.law.coef(kL * self.delta, kR * self.delta)
+
+    def sigma(self, c, x):
+        return self.g.abs_g(c, x)
+
+    def sigma_array(self, x, cells):
+        return self.g.abs_g_array(x, cells)
+
+
+def _theta_data(n=14, seed=3):
+    rng = np.random.default_rng(seed)
+    positions = np.sort(rng.uniform(-1.4, 1.4, n))
+    levels = rng.integers(-6, 7, n + 1)
+    levels[0] = levels[-1] = 0
+    return positions, levels
+
+
+class TrackerInterfaceTests(unittest.TestCase):
+    COEFFS = {
+        "sign-changing": lambda: PiecewiseAffine.from_function(lambda x: x * (1 - x ** 2), np.linspace(-2, 2, 17)),
+        "well-signed": lambda: PiecewiseAffine.from_function(lambda x: 2 + np.sin(3 * x), np.linspace(-2, 2, 17)),
+    }
+
+    def test_general_law_power_case_reproduces_the_tracker(self):
+        positions, levels = _theta_data()
+        for p in (1.5, 2.0, 3.0):
+            for name, make in self.COEFFS.items():
+                g = make()
+                ref = HeteroFrontTracker(MultiplicativeFlux(g, 0.05, p), positions, levels).run(1.5)
+                gen = HeteroFrontTracker(_GeneralLawFlux(g, 0.05, Power(p), p), positions, levels).run(1.5)
+                self.assertEqual(ref.counts, gen.counts, (p, name))
+                self.assertEqual([(i.kL, i.kR) for i in ref.items], [(i.kL, i.kR) for i in gen.items])
+                np.testing.assert_allclose(gen.positions(), ref.positions(), rtol=0, atol=1e-10)
+
+    def test_polynomial_tracker_invariants(self):
+        positions, levels = _theta_data(seed=7)
+        for h in POLYS.values():
+            for name, make in self.COEFFS.items():
+                tr = HeteroFrontTracker(_GeneralLawFlux(make(), 0.05, h), positions, levels)
+                tv, count = tr.total_variation(), tr.front_count()
+                for t in (0.05, 0.3, 1.0, 2.5):
+                    tr.run(t)
+                    tr.check_levels()
+                    self.assertTrue(np.all(np.diff(tr.positions()) >= -1e-11))
+                    self.assertLessEqual(tr.total_variation(), tv + 1e-12)
+                    self.assertLessEqual(tr.front_count(), count)
+                    self.assertTrue(tr.interface_admissible())
+                    self.assertEqual(tr.counts["emission"], 0)
+                    self.assertEqual(tr.counts["multi_front_collision"], 0)
+                self.assertGreater(tr.counts["collision"], 0, name)
+
+    def test_circle_runs_with_the_general_law(self):
+        g = PiecewiseAffine.from_function(lambda x: 2 + np.sin(2 * np.pi * x), np.arange(12) / 12, period=1.0)
+        positions = np.array([0.1, 0.35, 0.6, 0.8])
+        levels = np.array([3, -2, 5, 0])
+        for nl, p in ((Power(3.0), 3.0), (POLYS["u2+u4"], 2.0)):
+            tr = PeriodicHeteroFrontTracker(_GeneralLawFlux(g, 0.1, nl, p), positions, levels)
+            tv = tr.total_variation()
+            tr.run(2.0)
+            tr.check_levels()
+            self.assertLessEqual(tr.total_variation(), tv + 1e-12)
+            self.assertGreater(tr.counts["corner"], 0)
+        ref = PeriodicHeteroFrontTracker(MultiplicativeFlux(g, 0.1, 3.0), positions, levels).run(2.0)
+        gen = PeriodicHeteroFrontTracker(_GeneralLawFlux(g, 0.1, Power(3.0), 3.0), positions, levels).run(2.0)
+        self.assertEqual(ref.counts, gen.counts)
+        np.testing.assert_allclose(gen.positions(), ref.positions(), rtol=0, atol=1e-10)
+
+
 if __name__ == "__main__":
     unittest.main()
