@@ -265,14 +265,23 @@ class _TrackerCore:
 
     def _corner(self, f):
         g, t = self.g, self.time
-        self._retire(f, t)
         d = f.direction
         nxt = g.next_cell(f.cell, d)
+        seam = self.cyclic and ((d > 0 and nxt == 0) or (d < 0 and nxt == g.n_cells - 1))
+        if seam:
+            # A front that reaches the seam together with a neighbour it is
+            # closing on must collide first, as exact arithmetic orders it.
+            # Otherwise it would cross past that neighbour, and the chart
+            # coordinate jumps by L, so the order could not recover.
+            other = f.next if d > 0 else f.prev
+            if self._meets_now(*((f, other) if d > 0 else (other, f))):
+                self._collide(f if d > 0 else other)
+                return
+        self._retire(f, t)
         if d > 0:
             x, s = float(g.left[nxt]), float(self.flux.sigma_left[nxt])
         else:
             x, s = float(g.right[nxt]), float(self.flux.sigma_right[nxt])
-        seam = self.cyclic and ((d > 0 and nxt == 0) or (d < 0 and nxt == g.n_cells - 1))
         f.cell, f.t0, f.x0, f.s0, f.alpha = nxt, t, x, s, float(g.alpha[nxt])
         self.counts["corner"] += 1
         self._log(x, "corner")
@@ -284,7 +293,15 @@ class _TrackerCore:
         t = self.time
         iface = f.next if f.direction > 0 else f.prev
         if not isinstance(iface, Interface):
-            raise RuntimeError("front reached a zero of g without meeting its interface")
+            nearest = self._fan_front_at_zero(f, iface)
+            if nearest is None:
+                raise RuntimeError("front reached a zero of g without meeting its interface")
+            # A fan that starts at a zero and moves into it reaches it all at
+            # once. Absorb it from the interface outwards, one front per event:
+            # the nearest now, and f again at this same time.
+            self._absorb(nearest)
+            self._refresh_around([f])
+            return
         self._retire(f, t)
         iface.accrue(t, self.flux.delta)
         if f.direction > 0:
@@ -305,6 +322,56 @@ class _TrackerCore:
         if self.cyclic:
             self._normalize()
         self._refresh_around([left_neighbour, iface, *emitted])
+
+    def _meets_now(self, a, b):
+        """True if fronts a and its right neighbour b are closing and already met."""
+        if self._count < 2 or not (isinstance(a, Front) and isinstance(b, Front)) or a is b:
+            return False
+        if not a.kappa > b.kappa:
+            return False
+        t = self.time
+        wrap = self.cyclic and b is self._head
+        xa = a.x(t)
+        return b.x(t) + (self.g.period if wrap else 0.0) - xa <= self._tol(xa)
+
+    def _fan_front_at_zero(self, f, neighbour):
+        """The front next to the interface in a fan that reaches a zero with f.
+
+        Between f and the interface it is heading for there may only be
+        fronts that move the same way and are absorbed at this same time;
+        that happens when a whole fan starts at the zero. Returns the one
+        adjacent to the interface, or None if anything else is in the way.
+        """
+        d, t = f.direction, self.time
+        nearest = None
+        for _ in range(self._count):
+            if isinstance(neighbour, Interface):
+                return nearest
+            if not (isinstance(neighbour, Front) and neighbour.direction == d
+                    and neighbour.own_kind == "absorption" and neighbour.t_own <= t):
+                return None
+            nearest = neighbour
+            neighbour = neighbour.next if d > 0 else neighbour.prev
+        return None
+
+    def _fan_cell(self, x, cell):
+        """Cell (and position) where a fan from a collision at x starts.
+
+        ``cell`` is that of the fronts that met. ``g.cell_of`` is
+        right-continuous, so at a node it picks the cell to the right. The
+        colliding fronts are never on both sides of a zero (an Interface would
+        separate them), so when x sits on a zero of their cell the fan starts
+        on their side of it. Across any other node ``_place`` moves new fronts
+        on as their speed requires.
+        """
+        g = self.g
+        hint = g.cell_of(x)
+        if hint != cell:
+            if g.zero_right[cell] and hint == g.next_cell(cell, 1):
+                return cell, float(g.right[cell])
+            if g.zero_left[cell] and hint == g.next_cell(cell, -1):
+                return cell, float(g.left[cell])
+        return hint, x
 
     def _settle(self, iface, initial=False):
         """Enforce the interface condition at iface by emitting δ-fans.
@@ -390,7 +457,7 @@ class _TrackerCore:
             self._drop(m)
         if cyclic:
             x = float(g.wrap(x))
-        hint = g.cell_of(x)
+        hint, x = self._fan_cell(x, a.cell)
         outgoing = self._new_fronts(x, kL, kR, t, hint, s_event)
         self.counts["collision"] += 1
         if len(outgoing) > 1:
