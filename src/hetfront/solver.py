@@ -277,7 +277,7 @@ class _TrackerCore:
         self.counts["corner"] += 1
         self._log(x, "corner")
         if seam:
-            self._normalize()
+            self._normalize([f])
         self._refresh_around([f])
 
     def _absorb(self, f):
@@ -303,7 +303,7 @@ class _TrackerCore:
         self._record_interface(iface)
         emitted = self._settle(iface)
         if self.cyclic:
-            self._normalize()
+            self._normalize([left_neighbour, iface, *emitted])
         self._refresh_around([left_neighbour, iface, *emitted])
 
     def _settle(self, iface, initial=False):
@@ -415,10 +415,10 @@ class _TrackerCore:
         if not self._count:
             self._constant_level = kL
         if cyclic:
-            self._normalize()
+            self._normalize([left_neighbour, *outgoing])
         self._refresh_around([left_neighbour, *outgoing])
 
-    def _normalize(self):
+    def _normalize(self, touched=None):
         """Keep a cyclic item list sorted on the chart (overridden on the circle)."""
         return False
 

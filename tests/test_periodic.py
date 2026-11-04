@@ -98,6 +98,37 @@ class SignChangingCircleTests(unittest.TestCase):
         self.assertGreater(tracker.counts["absorption"], 10)
         self.assertGreater(tracker.counts["collision"], 10)
 
+    def test_local_reordering_matches_global_argmax(self):
+        """_normalize compares only touched and remembered pairs; check it
+        against the full descent argmax at every call, including coincident
+        fronts that cross the seam one corner event at a time."""
+        stats = {"calls": 0, "stale": 0}
+        test = self
+
+        class Checked(PeriodicHeteroFrontTracker):
+            def _normalize(self, touched=None):
+                expect = None
+                if touched is not None and self._count >= 2:
+                    pos = self.positions()
+                    expect = self.items[int(np.argmax(np.roll(pos, 1) - pos))]
+                rotated = super()._normalize(touched)
+                if expect is not None:
+                    test.assertIs(self._head, expect)
+                    stats["calls"] += 1
+                    stats["stale"] = max(stats["stale"], len(self._unsorted))
+                return rotated
+
+        g = PiecewiseAffine.from_function(lambda x: 2 + 0.9 * np.cos(4 * np.pi * x),
+                                          np.linspace(0, 1, 17)[:-1], period=1.0)
+        flux = MultiplicativeFlux(g, 0.05)
+        Checked(flux, np.arange(8) / 8, np.tile([10, -10], 4), enforce_interface=False).run(5.0)
+        self.assertGreater(stats["stale"], 0)  # the simultaneous-crossing case occurred
+        rng = np.random.default_rng(7)
+        for _ in range(6):
+            pos = np.sort(rng.choice(np.arange(400) / 400, 50, replace=False))
+            Checked(flux, pos, rng.integers(-15, 16, 50)).run(3.0)
+        self.assertGreater(stats["calls"], 1000)
+
     def test_interface_layer_on_circle(self):
         g = PiecewiseAffine.from_function(lambda x: np.sin(2 * np.pi * x),
                                           np.linspace(0, 1, 16, endpoint=False), period=1.0)
