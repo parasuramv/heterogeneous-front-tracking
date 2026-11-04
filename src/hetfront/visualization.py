@@ -40,7 +40,7 @@ class History:
     delta: float
     diagnostics: dict = field(default_factory=dict)
     periodic: bool = False
-    power: float = 2.0            # h(u) = |u|^p; needed to redraw fronts and profiles
+    power: object = 2.0           # p for h = |u|^p, or a Nonlinearity; redraws fronts and profiles
 
 
 def _step_profile(tracker, a, b):
@@ -106,7 +106,7 @@ def observe_tracker(tracker, x, times, *, mass_window=None):
     u[~np.isfinite(u)] = np.nan
     return History(x, times, levels, flux.delta * levels, u, steps,
                    tracker.pieces_until(times[-1]), tracker.g, flux.delta, diag, tracker.cyclic,
-                   flux.power)
+                   flux.nonlinearity if flux.general else flux.power)
 
 
 # ------------------------------------------------------------------ helpers
@@ -172,9 +172,27 @@ def thin_pieces(pieces, max_fronts=80):
     return [p for p in pieces if p.kL % stride == 0]
 
 
+def _law(power):
+    """The front law for a ``History.power`` value: a float p or a Nonlinearity."""
+    from .nonlinearity import Nonlinearity
+    from .trajectory import GeneralLaw
+    return GeneralLaw(power) if isinstance(power, Nonlinearity) else PowerLaw(power)
+
+
+def _flux(history):
+    from .flux import MultiplicativeFlux
+    from .nonlinearity import Nonlinearity
+    if isinstance(history.power, Nonlinearity):
+        return MultiplicativeFlux(history.g, history.delta, h=history.power)
+    return MultiplicativeFlux(history.g, history.delta, history.power)
+
+
 def front_lines(pieces, samples=24, power=2.0):
-    """Polylines (list of (n, 2) arrays in (x, t)) from closed-form pieces of h = |u|^power."""
-    law = PowerLaw(power)
+    """Polylines (list of (n, 2) arrays in (x, t)) from closed-form pieces.
+
+    ``power`` is p for h = |u|^p, or a ``Nonlinearity`` for a general h.
+    """
+    law = _law(power)
     lines = []
     for p in pieces:
         if p.t1 <= p.t0:
@@ -268,8 +286,7 @@ def plot_profile(history, index=-1, field="theta", *, ax=None, norm=None, dense=
         ax.set_ylim(-1.1 * m, 1.1 * m)
         ax.set_ylabel("θ")
     else:
-        from .flux import MultiplicativeFlux
-        flux = MultiplicativeFlux(history.g, history.delta, history.power)
+        flux = _flux(history)
         for a, b, k in zip(edges[:-1], edges[1:], levels):
             xs = np.linspace(a, b, max(3, int(dense * (b - a) / (xlim[1] - xlim[0]))))
             with np.errstate(invalid="ignore"):

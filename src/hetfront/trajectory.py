@@ -241,11 +241,14 @@ QUADRATIC = PowerLaw(2.0)
 # General convex h: closed-form arrival times, monotone root solves.
 # ---------------------------------------------------------------------------
 
-def _monotone_root(F, lo, hi, f_lo=None, f_hi=None):
-    """Root of a monotone F on [lo, hi] with F(lo) ≤ 0 ≤ F(hi) (Illinois + bisection).
+def _monotone_root(F, lo, hi, f_lo=None, f_hi=None, dF=None):
+    """Root of a monotone F on [lo, hi] with F(lo) ≤ 0 ≤ F(hi).
 
-    lo may exceed hi (a decreasing direction); the bracket is shrunk until
-    it is a few ulps wide or F vanishes. Returns the end with |F| smallest.
+    lo may exceed hi (a decreasing direction). With the exact derivative
+    ``dF`` this is Newton safeguarded by the bracket: a step leaving it is
+    replaced by bisection. Once a step is below 1e-9 of the bracket's scale,
+    the next iterate is exact to rounding (quadratic convergence) and is
+    returned. Without ``dF``, Illinois iteration shrinks the bracket to a few ulps.
     """
     f_lo = F(lo) if f_lo is None else f_lo
     f_hi = F(hi) if f_hi is None else f_hi
@@ -253,6 +256,28 @@ def _monotone_root(F, lo, hi, f_lo=None, f_hi=None):
         return lo
     if f_hi == 0.0:
         return hi
+    if dF is not None:
+        scale = max(abs(lo), abs(hi), abs(hi - lo))
+        x = (lo * f_hi - hi * f_lo) / (f_hi - f_lo)
+        for _ in range(100):
+            if not (min(lo, hi) < x < max(lo, hi)):
+                x = 0.5 * (lo + hi)
+            fx = F(x)
+            if fx == 0.0:
+                return x
+            if fx < 0.0:
+                lo = x
+            else:
+                hi = x
+            slope = dF(x)
+            step = fx / slope if slope and math.isfinite(slope) else math.inf
+            nxt = x - step
+            if abs(step) <= 1e-9 * scale and min(lo, hi) <= nxt <= max(lo, hi):
+                return nxt
+            if abs(hi - lo) <= 4.0 * math.ulp(scale):
+                return 0.5 * (lo + hi)
+            x = nxt
+        return 0.5 * (lo + hi)
     side = 0
     for _ in range(300):
         width = abs(hi - lo)
@@ -332,6 +357,7 @@ class GeneralLaw:
     def __init__(self, nonlinearity):
         from .nonlinearity import parse
         self.h = parse(nonlinearity).validate()
+        self._memo = {}
 
     def __eq__(self, other):
         return isinstance(other, GeneralLaw) and other.h == self.h
@@ -416,8 +442,25 @@ class GeneralLaw:
         lo, hi = (g0, g1) if g0 < g1 else (g1, g0)
         if lo <= 0.0 or hi > 2.0 * lo:
             return (self.primitive(coef, g1) - self.primitive(coef, g0)) / (g1 - g0)
-        values = [self.slowness(coef, lo + (hi - lo) * float(s)) for s in _gl_unit()[0]]
-        return math.fsum(w * v for w, v in zip(_gl_unit()[1].tolist(), values))
+        return _gauss_mean(lambda gamma: self.slowness(coef, gamma), lo, hi)
+
+    def mean_state(self, theta, g0, g1):
+        """Mean over γ in [g0, g1] of |u| = H(|θ|/γ) on the profile of level θ.
+
+        ∫ H(|θ|/γ) dγ = P(|θ|, γ) = γ Q(H(|θ|/γ)) with P(·, 0) = 0, so a cell
+        integral of the profile is (x2 - x1) times this mean; there is no
+        division by α. Gauss–Legendre is used when g0 and g1 are close.
+        """
+        if theta == 0.0:
+            return 0.0
+        if g0 == g1:
+            return self.state(theta, g0)
+        lo, hi = (g0, g1) if g0 < g1 else (g1, g0)
+        if lo <= 0.0 or hi > 2.0 * lo:
+            q = self.h.q_function
+            p_lo = lo * q(self.state(theta, lo)) if lo > 0.0 else 0.0
+            return (hi * q(self.state(theta, hi)) - p_lo) / (hi - lo)
+        return _gauss_mean(lambda gamma: self.state(theta, gamma), lo, hi)
 
     # -------------------------------------------------------------- front laws
     def travel_time(self, x0, s0, x1, s1, coef):
@@ -444,6 +487,16 @@ class GeneralLaw:
         if np.ndim(tau):
             return np.array([self.position(x0, s0, alpha, coef, float(t)) for t in np.ravel(tau)]
                             ).reshape(np.shape(tau))
+        key = (x0, s0, alpha, coef, tau)
+        memo = self._memo
+        hit = memo.get(key)
+        if hit is None:
+            if len(memo) > 4096:
+                memo.clear()
+            hit = memo[key] = self._position(x0, s0, alpha, coef, tau)
+        return hit
+
+    def _position(self, x0, s0, alpha, coef, tau):
         d = coef.direction
         if tau <= 0.0 or d == 0:
             return x0
@@ -474,7 +527,7 @@ class GeneralLaw:
                 step *= 2.0
                 far = x0 + d * step
                 f_far = F(far)
-        return _monotone_root(F, x0, far, -tau, f_far)
+        return _monotone_root(F, x0, far, -tau, f_far, dF=lambda x: self.slowness(coef, gamma(x)))
 
     def sigma(self, s0, alpha, coef, tau, x0=0.0):
         """γ after time tau from anchor γ0 (never negative within a cell)."""
@@ -512,7 +565,8 @@ class GeneralLaw:
         if db == 0:
             return Ta(xb)
         if da > 0 > db:
-            x = _monotone_root(lambda y: Ta(y) - Tb(y), xa, xb, -Tb(xa), Ta(xb))
+            x = _monotone_root(lambda y: Ta(y) - Tb(y), xa, xb, -Tb(xa), Ta(xb),
+                               dF=lambda y: self.slowness(ca, gamma(y)) - self.slowness(cb, gamma(y)))
             return 0.5 * (Ta(x) + Tb(x))
         # Common direction d: the leader is b for d > 0 and a for d < 0.
         d = da
@@ -545,11 +599,15 @@ class GeneralLaw:
                 d_stop = D(stop)
             else:
                 return math.inf
-        x = _monotone_root(D, lead_x, stop, D(lead_x), d_stop)
+        c_lead, c_lag = (cb, ca) if d > 0 else (ca, cb)
+        x = _monotone_root(D, lead_x, stop, D(lead_x), d_stop,
+                           dF=lambda y: self.slowness(c_lead, gamma(y)) - self.slowness(c_lag, gamma(y)))
         return 0.5 * (Ta(x) + Tb(x))
 
     def characteristic_coef(self, theta):
         return FrontCoef(theta, theta)
+
+    characteristic_kappa = characteristic_coef
 
     def sample_path(self, x0, s0, alpha, coef, t0, t1, samples=24):
         """Points (x, t) along one piece, uniform in x, with t explicit (no root solves)."""
@@ -559,6 +617,6 @@ class GeneralLaw:
         return xs, np.minimum(np.asarray(ts, dtype=float), t1)
 
 
-def _gl_unit():
-    from .nonlinearity import _GL_X, _GL_W
-    return _GL_X, _GL_W
+def _gauss_mean(f, lo, hi):
+    from .nonlinearity import gauss_mean
+    return gauss_mean(f, lo, hi)

@@ -95,6 +95,8 @@ class PeriodicStraightening:
         g = self.g
         if heterogeneous.g is not g or not homogeneous.cyclic or heterogeneous.time != homogeneous.time:
             raise ValueError("trackers must share the coefficient map and comparison time")
+        if heterogeneous.flux.general or homogeneous.flux.general:
+            raise ValueError("exact straightening exists only for h = |u|^p")
         if heterogeneous.flux.power != self.power or homogeneous.flux.power != self.power:
             raise ValueError("trackers must use this map's power p")
         hg = homogeneous.g
@@ -113,3 +115,34 @@ class PeriodicStraightening:
         weights = (right - left) / law.mean_array(law.sigma_of(g.abs_g_array(left, cells)),
                                                   law.sigma_of(g.abs_g_array(right, cells)))
         return math.fsum((np.abs(amplitude) * weights).tolist())
+
+
+def effective_flux_nodes(g, delta, levels, h):
+    """Nodes (v̄_k, F̄_k) of the homogenised polygonal flux for a general h.
+
+    For well-signed periodic g with sign η, the stationary profile of level
+    k has period mean v̄_k = η sgn(k) ⟨H(|k|δ/|g|)⟩ and flux F̄_k = η|k|δ.
+    Each cell mean is (x2 - x1) · ``GeneralLaw.mean_state``, from the closed
+    form P(θ, γ) = γ Q(H(θ/γ)), so no quadrature is involved. For
+    h = |u|^p this is ``PeriodicStraightening``'s effective flux c|v|^p at
+    the nodes. For a general h, the profile no longer factors as s(θ)ρ(x), so
+    there is no exact conjugacy. These nodes define the homogenised
+    comparison, not an identity, and the O(ε) corrector bound is not proved.
+    """
+    from .trajectory import GeneralLaw
+    if not isinstance(g, PiecewiseAffine) or not g.periodic or not g.is_well_signed:
+        raise ValueError("effective flux requires periodic g with no zeros")
+    law = GeneralLaw(h)
+    eta = float(g.sign[0])
+    lengths = (g.right - g.left).tolist()
+    left, right = g.absg_left.tolist(), g.absg_right.tolist()
+    levels = np.asarray(levels, dtype=int)
+    means = []
+    for k in levels.tolist():
+        if k == 0:
+            means.append(0.0)
+            continue
+        theta = abs(k) * delta
+        total = math.fsum(w * law.mean_state(theta, a, b) for w, a, b in zip(lengths, left, right))
+        means.append(eta * math.copysign(1.0, k) * total / g.period)
+    return np.asarray(means), eta * np.abs(levels) * delta

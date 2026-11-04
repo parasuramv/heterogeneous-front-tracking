@@ -10,6 +10,7 @@ Files appear in ``results/`` (or ``--output``):
 - ``<name>.png``              g_Δ, θ in space–time with exact fronts, u profile, diagnostics
 - ``<name>.npz``              arrays x, times, levels, theta, u, delta, power, nodes, g_values
 - ``<name>_pieces.csv``       every closed-form front piece: t0,t1,x0,sigma0,alpha,kappa,kL,kR,cell
+                             (for a general h: sigma0 is |g_Δ| and kappa is nan)
 - ``<name>_diagnostics.csv``  time, fronts, total variation of θ, mass, absorbed mass, edge inflow, events
 """
 import argparse
@@ -65,14 +66,16 @@ def main(argv=None):
     out.mkdir(parents=True, exist_ok=True)
     stem = out / example.name
     g = tracker.g
+    flux = tracker.flux
     np.savez_compressed(stem.with_suffix(".npz"), x=x, times=times, levels=history.levels,
-                        theta=history.theta, u=history.u, delta=tracker.flux.delta,
-                        power=tracker.flux.power,
+                        theta=history.theta, u=history.u, delta=flux.delta,
+                        power=np.nan if flux.general else flux.power, h=str(flux.nonlinearity),
                         nodes=g.nodes, g_values=g.values)
     with open(f"{stem}_pieces.csv", "w", newline="") as handle:
         writer = csv.writer(handle)
         writer.writerow(["t0", "t1", "x0", "sigma0", "alpha", "kappa", "kL", "kR", "cell"])
-        writer.writerows(history.pieces)
+        # For a general h the anchor is γ0 = |g_Δ| and the coefficient is (kL, kR) itself.
+        writer.writerows(p._replace(kappa=math.nan) if flux.general else p for p in history.pieces)
     with open(f"{stem}_diagnostics.csv", "w", newline="") as handle:
         writer = csv.writer(handle)
         d = history.diagnostics
@@ -82,7 +85,7 @@ def main(argv=None):
 
     print(example.description)
     print(f"g mesh: {len(g.nodes)} nodes, {len(g.zeros)} zeros; δ = {tracker.flux.delta:g}; "
-          f"h(u) = |u|^{tracker.flux.power:g}; t = {final:g}")
+          f"h(u) = {tracker.flux.nonlinearity}; t = {final:g}")
     print("events:", ", ".join(f"{k} {v}" for k, v in tracker.counts.items() if v))
     print(f"fronts: {history.diagnostics['fronts'][0]} -> {history.diagnostics['fronts'][-1]}")
     d = history.diagnostics

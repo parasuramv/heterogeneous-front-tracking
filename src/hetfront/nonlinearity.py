@@ -3,23 +3,41 @@
 A ``Nonlinearity`` is an even function h(u) = h(|u|) with
 
 * h(0) = 0 and h > 0 elsewhere, strictly convex on [0, ∞);
-* the Osgood tail  ∫^∞ dr / h(r) < ∞.
+* power-type growth: h(r) ≳ r^k as r → ∞ for some ``tail_exponent`` k > 1.
 
-The tail condition is exactly what makes stationary profiles integrable at
-transverse zeros of g, makes fronts reach those zeros in finite time, and
-makes the characteristic equation ṗ = -g'(q) h(p) blow up in finite time.
-Every closed form in ``trajectory.GeneralLaw`` is built from three functions
-on [0, ∞):
+Power-type growth is slightly stronger than the Osgood condition
+∫^∞ dr/h < ∞; for example u log²u is Osgood but not power-type. It is what
+makes stationary profiles integrable at transverse zeros of g, fronts reach
+those zeros in finite time, and the characteristic equation ṗ = -g'(q) h(p)
+blow up in finite time, all at rates comparable with |x - z|^{-1/k}.
+Every closed form in ``trajectory.GeneralLaw`` is built from three
+functions on [0, ∞):
 
     h,     H = h⁻¹ (``inverse``),     J(u) = ∫_u^∞ dr / h(r) (``osgood``),
 
 together with a cancellation-free divided difference ``dd(a, b)`` of h and
-the mean of 1/h over an interval (``inverse_mean``). All methods take and
-return Python floats for u, y ≥ 0; the sign of u is handled by the caller.
+the mean of 1/h over an interval (``inverse_mean``). All scalar methods take
+and return Python floats for u, y ≥ 0; the sign of u is handled by the caller.
+
+**Factored Osgood primitive.** J has opposite singular behaviour at its two
+ends: it diverges like u^{1-k_low} as u → 0 and decays like u^{1-k_top} as
+u → ∞. Both rates are carried exactly by writing
+
+    J(u) = (u / h(u)) · R(u),     R = h J / u = Q/u - 1,
+
+where Q(u) = u + h(u)J(u) is the profile primitive. For |u|^p, R is the
+constant 1/(p-1). For a polynomial h, R is bounded and analytic in s = log u,
+running from 1/(k_low - 1) to 1/(k_top - 1). It is tabulated once per h as
+piecewise Chebyshev series in s on a window [u_lo, u_hi]; every node is
+checked against quadrature when the table is built. ``AbsPolynomial`` replaces J
+outside the window by its exact asymptotic series: at infinity a series in
+powers u^{-(k_top - k_i)}, and at zero the local series plus the finite-part
+constant, with log terms where exponents resonate. ``Custom`` uses exp-sinh
+quadrature outside the window. It is exact but slower, and needs only the
+tail exponent.
 
 ``Power(p)`` is |u|^p with exact formulas. ``AbsPolynomial`` is
-Σ c_k |u|^{k} with c_k ≥ 0 and real k > 1. ``Custom`` wraps user callables
-with numerical fallbacks.
+Σ c_k |u|^{k} with c_k ≥ 0 and real k > 1. ``Custom`` wraps user callables.
 """
 
 import math
@@ -28,36 +46,99 @@ import numpy as np
 
 from .trajectory import divided_power
 
-# Gauss–Legendre nodes and weights on [0, 1].
-_GL_X, _GL_W = np.polynomial.legendre.leggauss(16)
-_GL_X = 0.5 * (_GL_X + 1.0)
-_GL_W = 0.5 * _GL_W
+# ----------------------------------------------------------------- quadrature
+_GAUSS = {}
+
+
+def gauss_rule(n):
+    """Gauss–Legendre nodes and weights on [0, 1] (cached), as Python lists."""
+    rule = _GAUSS.get(n)
+    if rule is None:
+        x, w = np.polynomial.legendre.leggauss(n)
+        rule = _GAUSS[n] = ((0.5 * (x + 1.0)).tolist(), (0.5 * w).tolist())
+    return rule
+
+
+def gauss_points(lo, hi):
+    """Number of Gauss–Legendre points for full precision on [lo, hi] with 0 < lo ≤ hi ≤ 2 lo.
+
+    The integrands used here (states and slownesses as functions of γ, or
+    1/h(r)) are analytic except at 0. With r = (hi - lo)/(hi + lo), the
+    Bernstein ellipse through 0 has ρ = (1 + sqrt(1 - r²))/r, and the error
+    decays like ρ^{-2n}. Two extra points cover the constant.
+    """
+    r = (hi - lo) / (hi + lo)
+    if r <= 0.0:
+        return 1
+    rho = (1.0 + math.sqrt(max(0.0, 1.0 - r * r))) / r
+    return min(24, 2 + math.ceil(41.5 / (2.0 * math.log(rho))))
 
 
 def gauss_mean(f, a, b):
-    """Mean of a smooth vectorised f over [a, b] by 16-point Gauss–Legendre."""
+    """Mean of a smooth scalar f over [a, b] (0 < a, b ≤ 2a) by adaptive Gauss–Legendre."""
     if a == b:
-        return float(f(np.array([a]))[0])
-    return float(np.dot(_GL_W, f(a + (b - a) * _GL_X)))
+        return f(a)
+    lo, hi = (a, b) if a < b else (b, a)
+    xs, ws = gauss_rule(gauss_points(lo, hi))
+    width = hi - lo
+    return math.fsum(w * f(lo + width * x) for x, w in zip(xs, ws))
 
 
-def _exp_sinh_nodes(t_max, step=1.0 / 16.0):
-    """Nodes x and weights w with ∫_0^∞ F(x) dx ≈ Σ w F(x) (exp-sinh rule)."""
-    t = np.arange(-6.0, t_max + step / 2, step)
-    x = np.exp(0.5 * math.pi * np.sinh(t))
-    w = step * 0.5 * math.pi * np.cosh(t) * x
-    return x, w
+# ------------------------------------------------------- Chebyshev table of R
+class _RatioTable:
+    """Piecewise Chebyshev interpolant of R(s), s = log u, on uniform pieces."""
+
+    __slots__ = ("s_lo", "s_hi", "width", "coefficients")
+
+    def __init__(self, ratio, u_lo, u_hi, degree=24, tol=4e-15):
+        s_lo, s_hi = math.log(u_lo), math.log(u_hi)
+        if not s_hi > s_lo:
+            s_hi = s_lo + 1e-3
+        pieces = max(1, math.ceil(s_hi - s_lo))
+        nodes = np.cos(np.pi * (np.arange(degree + 1) + 0.5) / (degree + 1))  # Chebyshev points
+        check = np.cos(np.pi * np.arange(1, degree + 1) / (degree + 1))        # interleaved points
+        for _ in range(6):
+            width = (s_hi - s_lo) / pieces
+            coefficients, ok = [], True
+            for j in range(pieces):
+                mid = s_lo + (j + 0.5) * width
+                values = np.array([ratio(math.exp(mid + 0.5 * width * x)) for x in nodes])
+                coef = np.polynomial.chebyshev.chebfit(nodes, values, degree)
+                test = np.array([ratio(math.exp(mid + 0.5 * width * x)) for x in check])
+                error = np.max(np.abs(np.polynomial.chebyshev.chebval(check, coef) - test) / np.abs(test))
+                if not error <= tol:
+                    ok = False
+                    break
+                coefficients.append(coef.tolist())
+            if ok:
+                break
+            pieces *= 2
+        else:
+            raise ArithmeticError("R = hJ/u could not be tabulated to full precision; is h smooth?")
+        self.s_lo, self.s_hi, self.width, self.coefficients = s_lo, s_hi, width, coefficients
+
+    def __call__(self, u):
+        s = math.log(u)
+        j = min(int((s - self.s_lo) / self.width), len(self.coefficients) - 1)
+        x = 2.0 * (s - self.s_lo - j * self.width) / self.width - 1.0
+        c = self.coefficients[j]
+        b1 = b2 = 0.0  # Clenshaw
+        x2 = 2.0 * x
+        for ck in reversed(c[1:]):
+            b1, b2 = ck + x2 * b1 - b2, b1
+        return c[0] + x * b1 - b2
 
 
+# ----------------------------------------------------------------- base class
 class Nonlinearity:
     """Base class: generic numerics from ``h`` and ``dh`` alone.
 
-    Subclasses must provide ``h`` and ``dh`` (vectorised on arrays of u ≥ 0)
-    and ``tail_exponent``, a number k > 1 with h(r) ≳ r^k as r → ∞. That is
-    the exponent that governs the profiles' blow-up rate at a zero.
+    Subclasses provide ``h`` and ``dh`` (vectorised on arrays of u ≥ 0, and
+    fast on Python floats) and ``tail_exponent``.
     """
 
     tail_exponent = None
+    _table_window = (1e-6, 1e6)
 
     # ------------------------------------------------------------ required
     def h(self, u):
@@ -66,7 +147,7 @@ class Nonlinearity:
     def dh(self, u):
         raise NotImplementedError
 
-    # ------------------------------------------------------------ generic
+    # ------------------------------------------------------------ inverse
     def __call__(self, u):
         return self.h(np.abs(u))
 
@@ -77,8 +158,11 @@ class Nonlinearity:
             return 0.0
         if math.isinf(y):
             return math.inf
-        hi = self._inverse_upper_bound(y)
-        return self._newton_from_above(y, hi)
+        return self._newton_from_above(y, self._inverse_upper_bound(y))
+
+    def inverse_array(self, y):
+        y = np.asarray(y, dtype=float)
+        return np.array([self.inverse(v) for v in y.ravel()]).reshape(y.shape)
 
     def _inverse_upper_bound(self, y):
         hi = 1.0
@@ -89,42 +173,99 @@ class Nonlinearity:
         return hi
 
     def _newton_from_above(self, y, u):
-        """Newton iterates for convex increasing h decrease monotonically to the root."""
+        """Newton iterates for convex increasing h decrease monotonically to the root.
+
+        Convergence is quadratic, so once a step is below 1e-9 relative the
+        next iterate is exact to rounding and is returned without a check.
+        """
+        h, dh = self.h, self.dh
         for _ in range(200):
-            excess = self.h(u) - y
+            excess = h(u) - y
             if excess <= 0.0:
                 return u
-            slope = self.dh(u)
+            slope = dh(u)
             if not slope > 0.0:
                 return u
-            nxt = u - excess / slope
+            step = excess / slope
+            nxt = u - step
             if not nxt < u:
                 return u
-            u = nxt if nxt > 0.0 else 0.5 * u
+            if nxt <= 0.0:
+                u = 0.5 * u
+                continue
+            if step <= 1e-9 * nxt:
+                return nxt
+            u = nxt
         return u
 
+    # --------------------------------------------------------- Osgood primitive
+    def _osgood_quadrature(self, u):
+        """J(u) = ∫_u^∞ dr/h by composite Gauss–Legendre in s = log r.
+
+        The integrand e^s/h(e^s) is analytic in a strip around the real axis
+        (the zeros of h nearest the positive axis), decays like e^{-(k-1)s},
+        and has O(1)-wide crossovers in s wherever one power of h overtakes
+        another. Unit panels with 12 points resolve all of these to rounding.
+        Panels are added until their contribution falls below 1e-18 of the
+        running total. This is the reference for the table and for ``Custom``.
+        """
+        xs, ws = gauss_rule(12)
+        nodes, weights = np.asarray(xs), np.asarray(ws)
+        h = self.h
+        s0, total, parts = math.log(u), 0.0, []
+        rate = max(self.tail_exponent - 1.0, 1e-3)
+        for j in range(100000):
+            r = np.exp(s0 + j + nodes)
+            with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
+                values = r / np.asarray(h(r), dtype=float)
+            values = np.where(np.isfinite(values), values, 0.0)
+            part = float(np.dot(weights, values))
+            parts.append(part)
+            total += part
+            # Remaining tail ≲ part·e^{-rate}/(1 - e^{-rate}) once the decay has set in.
+            if j > 2 and part <= 1e-18 * total * (1.0 - math.exp(-rate)):
+                break
+        return math.fsum(parts)
+
+    def _ratio_quadrature(self, u):
+        return float(self.h(u)) * self._osgood_quadrature(u) / u
+
+    def _table(self):
+        table = self.__dict__.get("_ratio_table")
+        if table is None:
+            table = self._ratio_table = _RatioTable(self._ratio_quadrature, *self._table_window)
+        return table
+
+    def _tail(self, u):
+        """J(u) outside the table window: quadrature here, exact series in subclasses."""
+        return self._osgood_quadrature(u)
+
     def osgood(self, u):
-        """J(u) = ∫_u^∞ dr / h(r) for u > 0 (inf at u = 0), by exp-sinh quadrature."""
+        """J(u) = ∫_u^∞ dr / h(r) for u > 0 (inf at 0, 0 at inf)."""
         u = float(u)
         if u <= 0.0:
             return math.inf
         if math.isinf(u):
             return 0.0
-        x, w = self._de_rule()
-        with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
-            values = w / self.h(u * (1.0 + x))
-        values = np.where(np.isfinite(values), values, 0.0)
-        return u * math.fsum(values.tolist())
+        lo, hi = self._table_window
+        if lo <= u <= hi:
+            return u * self._table()(u) / self.h(u)
+        return self._tail(u)
 
-    def _de_rule(self):
-        rule = getattr(self, "_de_cache", None)
-        if rule is None:
-            k = float(self.tail_exponent)
-            # Need (k-1)·(π/2)·sinh(t_max) ≳ 40, so that x^{1-k} at the cut is below 1e-17.
-            t_max = max(4.0, math.asinh(80.0 / (math.pi * (k - 1.0))))
-            rule = self._de_cache = _exp_sinh_nodes(t_max)
-        return rule
+    def osgood_ratio(self, u):
+        """R(u) = h(u) J(u) / u, bounded between 1/(k_low - 1) and 1/(k_top - 1)."""
+        u = float(u)
+        lo, hi = self._table_window
+        if lo <= u <= hi:
+            return self._table()(u)
+        if u <= 0.0 or math.isinf(u):
+            return self._ratio_limit(u)
+        return self.h(u) * self._tail(u) / u
 
+    def _ratio_limit(self, u):
+        return 1.0 / (self.tail_exponent - 1.0) if math.isinf(u) else math.nan
+
+    # ------------------------------------------------------ divided differences
     def dd(self, a, b):
         """(h(b) - h(a))/(b - a) for a, b ≥ 0, without cancellation when b ≈ a."""
         lo, hi = (a, b) if a <= b else (b, a)
@@ -136,14 +277,17 @@ class Nonlinearity:
 
     def inverse_mean(self, a, b):
         """Mean of 1/h over [a, b] with 0 < a ≤ b ≤ 2a (smooth there)."""
-        return gauss_mean(lambda r: 1.0 / self.h(r), a, b)
+        h = self.h
+        return gauss_mean(lambda r: 1.0 / h(r), a, b)
 
     def q_function(self, u):
-        """Q(u) = u + h(u) J(u), the profile primitive: P(θ, γ) = γ Q(H(θ/γ))."""
+        """Q(u) = u + h(u) J(u) = u (1 + R(u)): P(θ, γ) = γ Q(H(θ/γ))."""
         u = float(u)
         if u <= 0.0:
             return 0.0
-        return u + float(self.h(u)) * self.osgood(u)
+        if math.isinf(u):
+            return math.inf
+        return u * (1.0 + self.osgood_ratio(u))
 
     def q_divided(self, a, b):
         """(Q(b) - Q(a))/(b - a) for a, b ≥ 0, without cancellation when b ≈ a.
@@ -160,13 +304,14 @@ class Nonlinearity:
             return (self.q_function(hi) - self.q_function(lo)) / (hi - lo)
         return 1.0 + self.dd(lo, hi) * self.osgood(hi) - float(self.h(lo)) * self.inverse_mean(lo, hi)
 
+    # ------------------------------------------------------------ validation
     def validate(self):
-        """Check h(0) = 0, positivity, convexity on samples, and the Osgood tail."""
+        """Check h(0) = 0, positivity, convexity on samples, and a tail exponent k > 1."""
         if float(self.h(0.0)) != 0.0:
             raise ValueError("h(0) must be 0: a nonzero minimum adds the source m g'(x)")
         k = self.tail_exponent
         if k is None or not math.isfinite(k) or k <= 1.0:
-            raise ValueError("the tail exponent must exceed 1 (Osgood condition ∫^∞ dr/h < ∞)")
+            raise ValueError("the tail exponent must exceed 1 (power-type Osgood tail ∫^∞ dr/h < ∞)")
         r = np.geomspace(1e-6, 1e6, 241)
         values = np.asarray(self.h(r), dtype=float)
         if not np.all(values > 0.0) or not np.all(np.isfinite(values)):
@@ -187,22 +332,31 @@ class Power(Nonlinearity):
     """h(u) = |u|^p, p > 1, with exact H, J and divided differences."""
 
     def __init__(self, p):
+        if isinstance(p, bool):
+            raise TypeError("power must be a real number")
         p = float(p)
         if not math.isfinite(p) or p <= 1.0:
             raise ValueError("power p must be finite and greater than 1")
         self.p = self.tail_exponent = p
 
     def h(self, u):
-        return np.power(u, self.p) if np.ndim(u) else float(u) ** self.p
+        if type(u) is float or not np.ndim(u):
+            return float(u) ** self.p
+        return np.power(u, self.p)
 
     def dh(self, u):
-        return self.p * (np.power(u, self.p - 1.0) if np.ndim(u) else float(u) ** (self.p - 1.0))
+        if type(u) is float or not np.ndim(u):
+            return self.p * float(u) ** (self.p - 1.0)
+        return self.p * np.power(u, self.p - 1.0)
 
     def inverse(self, y):
         return float(y) ** (1.0 / self.p) if y > 0 else 0.0
 
     def osgood(self, u):
         return float(u) ** (1.0 - self.p) / (self.p - 1.0) if u > 0 else math.inf
+
+    def osgood_ratio(self, u):
+        return 1.0 / (self.p - 1.0)
 
     def dd(self, a, b):
         return divided_power(a, b, self.p)
@@ -219,15 +373,45 @@ class Power(Nonlinearity):
     def __repr__(self):
         return f"Power({self.p:g})"
 
+    def __str__(self):
+        return f"|u|^{self.p:g}"
+
+
+def _series(ratios, gaps, order, cutoff):
+    """Coefficients of 1/(1 + Σ a_i z^{d_i}) = Σ_e b_e z^e, dropping |b_e| < cutoff.
+
+    ``ratios`` a_i > 0 and ``gaps`` d_i > 0; returns a dict exponent → b_e.
+    The variable is normalised so that z ≤ 1 on the region of use and
+    Σ a_i ≤ 1/20, so |b_e| bounds each term there.
+    """
+    key = lambda e: round(e, 12)
+    total = {0.0: 1.0}
+    power = {0.0: 1.0}
+    for n in range(1, order + 1):
+        nxt = {}
+        for e, b in power.items():
+            for a, d in zip(ratios, gaps):
+                k = key(e + d)
+                nxt[k] = nxt.get(k, 0.0) - b * a
+        power = {e: b for e, b in nxt.items() if abs(b) > cutoff}
+        if not power:
+            break
+        for e, b in power.items():
+            total[e] = total.get(e, 0.0) + b
+    return {e: b for e, b in total.items() if b != 0.0}
+
 
 class AbsPolynomial(Nonlinearity):
-    """h(u) = Σ c_k |u|^k with c_k ≥ 0 and real exponents k > 1.
+    """h(u) = Σ c_k |u|^k with c_k > 0 and real exponents k > 1.
 
     ``terms`` maps exponents to coefficients, e.g. ``{2: 1, 4: 1}`` for
     u² + u⁴, or ``{2: 1, 3: 0.5}`` for u² + |u|³/2. The divided difference is
     exact termwise. H uses Newton from the tight upper bound
     min_k (y/c_k)^{1/k}. Near a zero of g the top exponent governs
-    (U ~ |x - z|^{-1/k_max}), while for small amplitudes the bottom exponent does.
+    (U ~ |x - z|^{-1/k_max}); for small amplitudes the bottom exponent does.
+    J is the exact asymptotic series outside a window [u_lo, u_hi], where the
+    lower (respectively upper) terms are at most 1/20 of the leading one, and
+    the factored Chebyshev table inside it.
     """
 
     def __init__(self, terms):
@@ -241,27 +425,108 @@ class AbsPolynomial(Nonlinearity):
                 raise ValueError("coefficients must be positive and finite")
         self.exponents = tuple(k for k, _ in items)
         self.coefficients = tuple(c for _, c in items)
+        self._terms = list(zip(self.exponents, self.coefficients))
+        self._slope_terms = [(k - 1.0, c * k) for k, c in self._terms]
         self.tail_exponent = self.exponents[-1]
+        self.single = len(items) == 1
+        if not self.single:
+            self._build_tails()
 
+    # ------------------------------------------------------------- values
     def h(self, u):
-        if np.ndim(u):
-            u = np.asarray(u, dtype=float)
-            return sum(c * np.power(u, k) for k, c in zip(self.exponents, self.coefficients))
-        u = float(u)
-        return math.fsum(c * u ** k for k, c in zip(self.exponents, self.coefficients))
+        if type(u) is float or not np.ndim(u):
+            total = 0.0
+            for k, c in self._terms:
+                total += c * float(u) ** k
+            return total
+        u = np.asarray(u, dtype=float)
+        return sum(c * np.power(u, k) for k, c in self._terms)
 
     def dh(self, u):
-        if np.ndim(u):
-            u = np.asarray(u, dtype=float)
-            return sum(c * k * np.power(u, k - 1.0) for k, c in zip(self.exponents, self.coefficients))
-        u = float(u)
-        return math.fsum(c * k * u ** (k - 1.0) for k, c in zip(self.exponents, self.coefficients))
+        if type(u) is float or not np.ndim(u):
+            total = 0.0
+            for k, c in self._slope_terms:
+                total += c * float(u) ** k
+            return total
+        u = np.asarray(u, dtype=float)
+        return sum(c * np.power(u, k) for k, c in self._slope_terms)
 
     def _inverse_upper_bound(self, y):
-        return min((y / c) ** (1.0 / k) for k, c in zip(self.exponents, self.coefficients))
+        return min((y / c) ** (1.0 / k) for k, c in self._terms)
 
     def dd(self, a, b):
-        return math.fsum(c * divided_power(a, b, k) for k, c in zip(self.exponents, self.coefficients))
+        return math.fsum(c * divided_power(a, b, k) for k, c in self._terms)
+
+    # ------------------------------------------------- J: series and table
+    def _build_tails(self):
+        (k0, c0), (K, cK) = self._terms[0], self._terms[-1]
+        target, cutoff = 0.05, 1e-19
+
+        def window(ratios, gaps, sign):
+            # Smallest (sign = +1: largest) z with Σ a_i z^{sign·d_i} ≤ target, by bisection in log z.
+            def excess(s):
+                return sum(a * math.exp(sign * d * s) for a, d in zip(ratios, gaps)) - target
+            lo, hi = -300.0, 300.0
+            for _ in range(200):
+                mid = 0.5 * (lo + hi)
+                if (excess(mid) > 0) == (sign > 0):
+                    hi = mid
+                else:
+                    lo = mid
+            return math.exp(lo if sign > 0 else hi)
+
+        # Small u: 1/h = r^{-k0}/c0 · Σ_e b_e r^e.
+        small_a = [c / c0 for _, c in self._terms[1:]]
+        small_d = [k - k0 for k, _ in self._terms[1:]]
+        u_lo = window(small_a, small_d, +1)
+        # Expand in z = r/u_lo ≤ 1, so the cutoff is relative to the leading term.
+        small = {e: b / u_lo ** e for e, b in
+                 _series([a * u_lo ** d for a, d in zip(small_a, small_d)], small_d, 80, cutoff).items()}
+        # Large u: 1/h = r^{-K}/cK · Σ_e b_e r^{-e}.
+        large_a = [c / cK for _, c in self._terms[:-1]]
+        large_d = [K - k for k, _ in self._terms[:-1]]
+        u_hi = window(large_a, large_d, -1)
+        large = {e: b * u_hi ** e for e, b in
+                 _series([a * u_hi ** -d for a, d in zip(large_a, large_d)], large_d, 80, cutoff).items()}
+        if u_hi < u_lo:  # windows overlap: no middle table is needed
+            u_lo = u_hi = math.sqrt(u_lo * u_hi)
+        self._table_window = (u_lo, u_hi)
+        # J(u) = (1/cK) Σ b_e u^{1-K-e}/(K+e-1) for u ≥ u_hi.
+        self._large = [(1.0 - K - e, b / (cK * (K + e - 1.0))) for e, b in sorted(large.items())]
+        # J(u) = C - (1/c0) Σ b_e F_e(u), F_e = u^β/β (β = e - k0 + 1) or log u, for u ≤ u_lo.
+        small_terms = []
+        for e, b in sorted(small.items()):
+            beta = e - k0 + 1.0
+            small_terms.append((beta, b / c0, abs(beta) < 1e-12))
+        self._small = small_terms
+        self._small_constant = 0.0
+        self._small_constant = self._osgood_quadrature(u_lo) - self._small_series(u_lo)
+
+    def _small_series(self, u):
+        """-(1/c0) Σ b_e F_e(u), so that J = C + this near 0."""
+        log_u = math.log(u)
+        terms = [-b * (log_u if logarithmic else u ** beta / beta) for beta, b, logarithmic in self._small]
+        return math.fsum(terms)
+
+    def _tail(self, u):
+        lo, hi = self._table_window
+        if u >= hi:
+            return math.fsum(b * u ** a for a, b in self._large)
+        return self._small_constant + self._small_series(u)
+
+    def _ratio_limit(self, u):
+        return 1.0 / ((self.exponents[-1] if math.isinf(u) else self.exponents[0]) - 1.0)
+
+    def osgood(self, u):
+        if self.single:
+            (k, c), = self._terms
+            return float(u) ** (1.0 - k) / (c * (k - 1.0)) if u > 0 else math.inf
+        return Nonlinearity.osgood(self, u)
+
+    def osgood_ratio(self, u):
+        if self.single:
+            return 1.0 / (self.exponents[0] - 1.0)
+        return Nonlinearity.osgood_ratio(self, u)
 
     def __eq__(self, other):
         return (isinstance(other, AbsPolynomial) and other.exponents == self.exponents
@@ -271,8 +536,10 @@ class AbsPolynomial(Nonlinearity):
         return hash(("AbsPolynomial", self.exponents, self.coefficients))
 
     def __repr__(self):
-        terms = " + ".join(f"{c:g}|u|^{k:g}" for k, c in zip(self.exponents, self.coefficients))
-        return f"AbsPolynomial({terms})"
+        return f"AbsPolynomial({dict(self._terms)!r})"
+
+    def __str__(self):
+        return " + ".join(f"{'' if c == 1 else f'{c:g}'}|u|^{k:g}" for k, c in self._terms)
 
 
 class Custom(Nonlinearity):
@@ -281,16 +548,19 @@ class Custom(Nonlinearity):
     ``h`` and ``dh`` must accept numpy arrays. ``tail_exponent`` is a k > 1
     with h(r) ≳ r^k at infinity. It cannot be certified from samples, so the
     caller must state it. ``inverse`` and ``osgood`` may be given as closed
-    forms; otherwise Newton and exp-sinh quadrature are used.
+    forms. Otherwise H uses Newton, and J the factored Chebyshev table on
+    ``window`` with exp-sinh quadrature outside it.
     """
 
-    def __init__(self, h, dh, tail_exponent, inverse=None, osgood=None, name="h"):
+    def __init__(self, h, dh, tail_exponent, inverse=None, osgood=None, name="h", window=(1e-6, 1e6)):
         self._h, self._dh, self.name = h, dh, name
         self.tail_exponent = float(tail_exponent)
+        self._table_window = tuple(map(float, window))
         if inverse is not None:
             self.inverse = lambda y: float(inverse(float(y))) if y > 0 else 0.0
         if osgood is not None:
             self.osgood = lambda u: float(osgood(float(u))) if u > 0 else math.inf
+            self.osgood_ratio = lambda u: self.h(u) * self.osgood(u) / u
 
     def h(self, u):
         return self._h(u) if np.ndim(u) else float(self._h(np.array([float(u)]))[0])
@@ -301,12 +571,14 @@ class Custom(Nonlinearity):
     def __repr__(self):
         return f"Custom({self.name})"
 
+    __str__ = __repr__
+
 
 def parse(spec):
     """Parse '|u|^3 + 0.5u^2', 'u^2+u^4' or '2.5' (a power) into a Nonlinearity."""
     if isinstance(spec, Nonlinearity):
         return spec
-    if isinstance(spec, (int, float)):
+    if isinstance(spec, (int, float)) and not isinstance(spec, bool):
         return Power(spec)
     text = str(spec).replace(" ", "").replace("|u|", "u").replace("**", "^").replace("-", "+-")
     try:

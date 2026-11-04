@@ -487,13 +487,21 @@ class _TrackerCore:
         mids = 0.5 * (x1 + x2)
         levels = self.sample_levels(mids)
         cells = g.cell_of(mids)
-        s = self.flux.s(levels)
         # Translate both endpoints together, keeping the right endpoint on the
         # closing side of a seam rather than wrapping it into the first cell.
         shift = (np.floor((mids - g.origin) / g.period) * g.period
                  if self.cyclic else 0.0)
         s1 = self.flux.sigma_array(x1 - shift, cells)
         s2 = self.flux.sigma_array(x2 - shift, cells)
+        if self.flux.general:
+            # ∫ U[θ] dx = sgn(g) sgn(θ) (x2 - x1) · mean_γ H(|θ|/γ), closed form via P(θ, γ).
+            delta, law = self.flux.delta, self.law
+            parts = np.array([0.0 if k == 0 else
+                              float(np.sign(k)) * float(g.sign[c]) * (b - a) * law.mean_state(abs(k) * delta, ga, gb)
+                              for k, c, a, b, ga, gb in zip(levels.tolist(), cells.tolist(), x1.tolist(),
+                                                            x2.tolist(), s1.tolist(), s2.tolist())])
+            return xs, parts
+        s = self.flux.s(levels)
         # ∫ |g|^{-1/p} dx over [x1, x2] = (x2 - x1)/M(σ1, σ2); for p = 2, 2(x2 - x1)/(σ1 + σ2).
         with np.errstate(invalid="ignore", divide="ignore"):
             if self.law.quadratic:

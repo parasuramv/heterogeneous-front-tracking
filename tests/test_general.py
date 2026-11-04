@@ -293,5 +293,133 @@ class TrackerInterfaceTests(unittest.TestCase):
         np.testing.assert_allclose(gen.positions(), ref.positions(), rtol=0, atol=1e-10)
 
 
+
+# ---------------------------------------------------------------------------
+# The public API (phase 3): MultiplicativeFlux(g, δ, h=...).
+# ---------------------------------------------------------------------------
+from hetfront.homogenisation import PeriodicStraightening, effective_flux_nodes  # noqa: E402
+
+SIGN_CHANGING = lambda: PiecewiseAffine.from_function(lambda x: x * (1 - x ** 2), np.linspace(-2.5, 2.5, 21))
+
+
+def _pulse(x):
+    return np.where(np.abs(x) < 1.3, 1.2 * np.cos(np.pi * x / 2.6) - 0.3 * np.sin(3 * x), 0.0)
+
+
+class PublicFluxTests(unittest.TestCase):
+    def test_construction(self):
+        g = SIGN_CHANGING()
+        self.assertFalse(MultiplicativeFlux(g, 0.1, h="|u|^3").general)
+        self.assertEqual(MultiplicativeFlux(g, 0.1, h="|u|^3").power, 3.0)
+        flux = MultiplicativeFlux(g, 0.1, h="u^2+u^4")
+        self.assertTrue(flux.general)
+        self.assertIsNone(flux.power)
+        self.assertEqual(flux.nonlinearity, POLYS["u2+u4"])
+        with self.assertRaises(TypeError):
+            flux.s(3)
+        with self.assertRaises(ValueError):
+            MultiplicativeFlux(g, 0.1, power=3.0, h="u^2+u^4")
+        with self.assertRaises(ValueError):
+            MultiplicativeFlux(g, 0.1, h="u^2+1")  # not parseable as a convex h with h(0) = 0
+
+    def test_level_maps_invert(self):
+        flux = MultiplicativeFlux(SIGN_CHANGING(), 0.01, h="u^2+|u|^3")
+        x = np.array([-2.2, -0.6, 0.4, 1.7])
+        k = np.array([-40, 17, -3, 250])
+        u = flux.u(k, x)
+        np.testing.assert_allclose(flux.theta_of(x, u), k * flux.delta, rtol=1e-14)
+        np.testing.assert_array_equal(flux.level(flux.theta_of(x, u)), k)
+        # f_u = g h'(u)
+        np.testing.assert_allclose(flux.characteristic_speed(k, x),
+                                   flux.g(x) * np.sign(u) * POLYS["u2+|u|3"].dh(np.abs(u)), rtol=1e-13)
+
+    def test_generic_numerics_reproduce_the_power_tracker(self):
+        """AbsPolynomial({p: 1}) runs GeneralLaw's numerical path; PowerLaw is exact."""
+        g = SIGN_CHANGING()
+        for p in (1.5, 3.0):
+            ref = HeteroFrontTracker.from_function(MultiplicativeFlux(g, 0.05, p), _pulse, (-1.5, 1.5), cells=24)
+            gen = HeteroFrontTracker.from_function(MultiplicativeFlux(g, 0.05, h=AbsPolynomial({p: 1.0})),
+                                                   _pulse, (-1.5, 1.5), cells=24)
+            for t in (0.0, 0.4, 1.5):
+                ref.run(t), gen.run(t)
+                self.assertEqual(ref.counts, gen.counts)
+                np.testing.assert_allclose(gen.positions(), ref.positions(), rtol=0, atol=1e-10)
+                self.assertAlmostEqual(gen.integral(-2.4, 2.4), ref.integral(-2.4, 2.4), delta=1e-12)
+                self.assertAlmostEqual(gen.mass_absorbed(), ref.mass_absorbed(), delta=1e-12)
+                xs = np.linspace(-2.4, 2.4, 97)
+                np.testing.assert_allclose(gen.primitive(xs), ref.primitive(xs), rtol=0, atol=1e-12)
+
+    def test_mass_budget_through_absorption(self):
+        for h in POLYS.values():
+            flux = MultiplicativeFlux(SIGN_CHANGING(), 0.05, h=h)
+            tr = HeteroFrontTracker.from_function(flux, _pulse, (-1.5, 1.5), cells=30)
+            a, b = -2.3, 2.3
+            mass0 = tr.integral(a, b)
+            times = [0.2, 0.7, 1.5, 3.0]
+            for t in times:
+                tr.run(t)
+            inflow = tr.flux_through(a, [0.0] + times) - tr.flux_through(b, [0.0] + times)
+            self.assertGreater(tr.counts["absorption"], 0)
+            self.assertGreater(abs(tr.mass_absorbed()), 1e-3)
+            residual = tr.integral(a, b) + tr.mass_absorbed() - inflow[-1] - mass0
+            self.assertLess(abs(residual), 1e-11, str(h))
+            self.assertEqual(tr.counts["emission"], 0)
+            self.assertTrue(tr.interface_admissible())
+
+    def test_integral_matches_quadrature_of_the_profile(self):
+        flux = MultiplicativeFlux(SIGN_CHANGING(), 0.05, h="u^2+u^4")
+        tr = HeteroFrontTracker.from_function(flux, _pulse, (-1.5, 1.5), cells=30).run(0.5)
+        a, b = 0.15, 0.85  # inside one sign interval, away from zeros
+        edges = np.unique(np.r_[a, b, tr.positions(), flux.g.nodes])
+        edges = edges[(edges >= a) & (edges <= b)]
+        xs, ws = np.polynomial.legendre.leggauss(30)
+        total = 0.0
+        for lo, hi in zip(edges[:-1], edges[1:]):
+            pts = 0.5 * (lo + hi) + 0.5 * (hi - lo) * xs
+            total += 0.5 * (hi - lo) * np.dot(ws, tr.sample_u(pts))
+        self.assertAlmostEqual(tr.integral(a, b), total, delta=1e-12)
+
+    def test_l1_contraction(self):
+        g = SIGN_CHANGING()
+        for h in POLYS.values():
+            flux = MultiplicativeFlux(g, 0.05, h=h)
+            one = HeteroFrontTracker.from_function(flux, _pulse, (-1.5, 1.5), cells=30)
+            two = HeteroFrontTracker.from_function(flux, lambda x: 0.8 * _pulse(x - 0.2), (-1.5, 1.5), cells=30)
+            distances = []
+            for t in (0.0, 0.3, 0.9, 2.0):
+                one.run(t), two.run(t)
+                distances.append(one.u_l1_distance(two, -2.4, 2.4))
+            self.assertTrue(all(b <= a + 1e-11 for a, b in zip(distances, distances[1:])), distances)
+
+    def test_characteristic_reaches_a_zero_at_the_osgood_time(self):
+        h = POLYS["u2+u4"]
+        flux = MultiplicativeFlux(PiecewiseAffine([-1, 1], [-1, 1], extend="affine"), 0.1, h=h)
+        theta = -0.6  # g = x, x0 = 1: left-moving into the zero at 0
+        xs, ts = flux.characteristic(1.0, theta, 50.0, samples=8)
+        self.assertEqual(xs[-1], 0.0)
+        self.assertAlmostEqual(ts[-1], h.osgood(h.inverse(abs(theta))), places=13)
+
+    def test_effective_flux_nodes(self):
+        g = PiecewiseAffine.from_function(lambda x: 2 + np.sin(2 * np.pi * x), np.arange(16) / 16, period=1.0)
+        levels = np.arange(-6, 7)
+        for p in (1.5, 3.0):
+            v, F = effective_flux_nodes(g, 0.1, levels, Power(p))
+            c = PeriodicStraightening(g, p).coefficient
+            np.testing.assert_allclose(F, c * np.abs(v) ** p, rtol=1e-12)
+        v, F = effective_flux_nodes(g, 0.1, levels, "u^2+u^4")
+        self.assertTrue(np.all(np.diff(v) > 0))
+        slopes = np.diff(F) / np.diff(v)  # the homogenised flux F̄(v̄) is even and convex
+        self.assertTrue(np.all(np.diff(slopes) > 0))
+        np.testing.assert_allclose(F, F[::-1])
+
+    def test_straightening_rejects_general_h(self):
+        g = PiecewiseAffine.from_function(lambda x: 2 + np.sin(2 * np.pi * x), np.arange(16) / 16, period=1.0)
+        straight = PeriodicStraightening(g, 2.0)
+        flux = MultiplicativeFlux(g, 0.1, h="u^2+u^4")
+        het = PeriodicHeteroFrontTracker(flux, [0.2, 0.6], [1, -1])
+        with self.assertRaises(ValueError):
+            straight.corrector_l1(het, het)
+
+
 if __name__ == "__main__":
     unittest.main()
