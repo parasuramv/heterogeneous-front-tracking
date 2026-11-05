@@ -129,6 +129,20 @@ class SignChangingCircleTests(unittest.TestCase):
             Checked(flux, pos, rng.integers(-15, 16, 50)).run(3.0)
         self.assertGreater(stats["calls"], 1000)
 
+    def test_fronts_reaching_the_seam_together_collide_first(self):
+        """A front reaching the seam where a front it closes on already sits
+        must collide, not cross past it: the chart coordinate jumps by L, and
+        the order broke, losing mass (16% here) or stopping the run."""
+        g = PiecewiseAffine.from_function(lambda x: 2 + 0.9 * np.cos(4 * np.pi * x),
+                                          np.linspace(0, 1, 17)[:-1], period=1.0)
+        tracker = PeriodicHeteroFrontTracker(MultiplicativeFlux(g, 0.05), np.arange(36) / 36,
+                                             np.tile([10, -10], 18), enforce_interface=False)
+        mass = tracker.integral()
+        for t in (0.7, 2.0, 9.0):
+            tracker.run(t)
+            self.assertAlmostEqual(tracker.integral(), mass, delta=1e-12)
+            tracker.check_levels()
+
     def test_interface_layer_on_circle(self):
         g = PiecewiseAffine.from_function(lambda x: np.sin(2 * np.pi * x),
                                           np.linspace(0, 1, 16, endpoint=False), period=1.0)
