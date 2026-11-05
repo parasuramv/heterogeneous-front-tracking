@@ -1,1 +1,6 @@
 Checking circle-sign-changing, h=|u|^2 + |u|^4
+circle-sign-changing, h=|u|^2 + |u|^4: {'theta_l1': 2.0198894237575633, 'primitive': 1.774501677950302, 'primitive_dense': 1.77450167795005}
+Checking line-sign-changing, h=|u|^2 + |u|^4
+line-sign-changing, h=|u|^2 + |u|^4: {'theta_l1': 1.678773881832428, 'primitive': 1.5868602931419118, 'primitive_dense': 1.5867849613245373}
+Checking line-well-signed, h=|u|^2 + |u|^4
+line-well-signed, h=|u|^2 + |u|^4: {'theta_l1': 2.012873518102152, 'primitive': 1.980733775858892, 'primitive_dense': 1.9808020374610322}

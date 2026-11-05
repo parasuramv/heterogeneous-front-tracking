@@ -1,0 +1,197 @@
+[
+  {
+    "baseline": "convergence_circle-sign-changing_h-u2+u4.json",
+    "problem": "circle-sign-changing",
+    "power": null,
+    "flux": "|u|^2 + |u|^4",
+    "samples": 801,
+    "dense_samples": 1601,
+    "reference": {
+      "power": null,
+      "flux": "|u|^2 + |u|^4",
+      "final_time": 1.0,
+      "delta": 0.0015625,
+      "nodes": 2048,
+      "max_events": 5000000,
+      "events": 451708,
+      "seconds": 488.70553232600014
+    },
+    "mesh": [
+      {
+        "delta": 0.0015625,
+        "nodes": 16,
+        "h": 0.0625,
+        "theta_l1": 0.00011719325726414007,
+        "primitive": 0.0006709774013241854,
+        "primitive_dense": 0.0006709774013241576
+      },
+      {
+        "delta": 0.0015625,
+        "nodes": 32,
+        "h": 0.03125,
+        "theta_l1": 2.800276162404292e-05,
+        "primitive": 0.00017411571969289108,
+        "primitive_dense": 0.0001741157196929466
+      },
+      {
+        "delta": 0.0015625,
+        "nodes": 64,
+        "h": 0.015625,
+        "theta_l1": 6.64355794257075e-06,
+        "primitive": 4.9027747331259475e-05,
+        "primitive_dense": 4.902774733070436e-05
+      },
+      {
+        "delta": 0.0015625,
+        "nodes": 128,
+        "h": 0.0078125,
+        "theta_l1": 1.6581394798155797e-06,
+        "primitive": 1.4014685638275015e-05,
+        "primitive_dense": 1.401468563830277e-05
+      },
+      {
+        "delta": 0.0015625,
+        "nodes": 256,
+        "h": 0.00390625,
+        "theta_l1": 4.389913921854789e-07,
+        "primitive": 5.045962771635382e-06,
+        "primitive_dense": 5.045962771635382e-06
+      }
+    ],
+    "orders": {
+      "theta_l1": 2.0198894237575633,
+      "primitive": 1.774501677950302,
+      "primitive_dense": 1.77450167795005
+    }
+  },
+  {
+    "baseline": "convergence_line-sign-changing_h-u2+u4.json",
+    "problem": "line-sign-changing",
+    "power": null,
+    "flux": "|u|^2 + |u|^4",
+    "samples": 801,
+    "dense_samples": 1601,
+    "reference": {
+      "power": null,
+      "flux": "|u|^2 + |u|^4",
+      "final_time": 1.0,
+      "delta": 0.0015625,
+      "nodes": 2048,
+      "max_events": 5000000,
+      "events": 401259,
+      "seconds": 421.9364589940001
+    },
+    "mesh": [
+      {
+        "delta": 0.0015625,
+        "nodes": 16,
+        "h": 0.26666666666666666,
+        "theta_l1": 0.007429584424154971,
+        "primitive": 0.020740272145650898,
+        "primitive_dense": 0.020740272145650843
+      },
+      {
+        "delta": 0.0015625,
+        "nodes": 32,
+        "h": 0.12903225806451613,
+        "theta_l1": 0.002333955963010736,
+        "primitive": 0.007263131857209736,
+        "primitive_dense": 0.007271874639069266
+      },
+      {
+        "delta": 0.0015625,
+        "nodes": 64,
+        "h": 0.06349206349206349,
+        "theta_l1": 0.0007109338740897343,
+        "primitive": 0.0023597075936082536,
+        "primitive_dense": 0.0023609792209803495
+      },
+      {
+        "delta": 0.0015625,
+        "nodes": 128,
+        "h": 0.031496062992125984,
+        "theta_l1": 0.00021615008345994113,
+        "primitive": 0.000756390198719337,
+        "primitive_dense": 0.0007566154466323895
+      },
+      {
+        "delta": 0.0015625,
+        "nodes": 256,
+        "h": 0.01568627450980392,
+        "theta_l1": 6.420600302922366e-05,
+        "primitive": 0.00023386672486446457,
+        "primitive_dense": 0.00023403352703873712
+      }
+    ],
+    "orders": {
+      "theta_l1": 1.678773881832428,
+      "primitive": 1.5868602931419118,
+      "primitive_dense": 1.5867849613245373
+    }
+  },
+  {
+    "baseline": "convergence_line-well-signed_h-u2+u4.json",
+    "problem": "line-well-signed",
+    "power": null,
+    "flux": "|u|^2 + |u|^4",
+    "samples": 801,
+    "dense_samples": 1601,
+    "reference": {
+      "power": null,
+      "flux": "|u|^2 + |u|^4",
+      "final_time": 1.0,
+      "delta": 0.0015625,
+      "nodes": 2048,
+      "max_events": 5000000,
+      "events": 445484,
+      "seconds": 432.5737336850002
+    },
+    "mesh": [
+      {
+        "delta": 0.0015625,
+        "nodes": 16,
+        "h": 0.5333333333333333,
+        "theta_l1": 0.016597404820468155,
+        "primitive": 0.018353402410063446,
+        "primitive_dense": 0.018364861126220933
+      },
+      {
+        "delta": 0.0015625,
+        "nodes": 32,
+        "h": 0.25806451612903225,
+        "theta_l1": 0.0038684602815303518,
+        "primitive": 0.00453258533545553,
+        "primitive_dense": 0.004532585335456085
+      },
+      {
+        "delta": 0.0015625,
+        "nodes": 64,
+        "h": 0.12698412698412698,
+        "theta_l1": 0.0009401526100787338,
+        "primitive": 0.0011100713088786907,
+        "primitive_dense": 0.0011103113698364142
+      },
+      {
+        "delta": 0.0015625,
+        "nodes": 128,
+        "h": 0.06299212598425197,
+        "theta_l1": 0.0002259014181027778,
+        "primitive": 0.00027447039156880404,
+        "primitive_dense": 0.00027468162568705656
+      },
+      {
+        "delta": 0.0015625,
+        "nodes": 256,
+        "h": 0.03137254901960784,
+        "theta_l1": 5.542012684401473e-05,
+        "primitive": 6.740714600389497e-05,
+        "primitive_dense": 6.74071460040615e-05
+      }
+    ],
+    "orders": {
+      "theta_l1": 2.012873518102152,
+      "primitive": 1.980733775858892,
+      "primitive_dense": 1.9808020374610322
+    }
+  }
+]

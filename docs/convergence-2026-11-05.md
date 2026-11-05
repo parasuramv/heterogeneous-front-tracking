@@ -68,7 +68,8 @@ follows $2-1/k_{\max}$. Two cautions apply:
 * **The line slopes rise toward the finest level, past the heuristic** (1.81 > 7/4,
   1.73 > 5/3). The reference is only four times finer than the finest run.
   Subtracting a fixed reference makes the finest levels steeper. The
-  finer-reference check below tests this.
+  finer-reference check below confirms this: the finest slopes become 1.74
+  and 1.65.
 * **On the circle, $u^2+u^4$ stays at a flat 2.0.** Its errors there are 30–100 times
   smaller than on the line. By $t=1$ the polynomial dynamics leave weak
   interface levels beside the zeros: about $(8,-1)$ and $(3,0)$ at δ = 0.0125,
@@ -85,7 +86,45 @@ order is near 2, as it was for powers: the signed errors cancel.
 
 ## Finer reference check
 
-CHECK_TABLE
+The spatial reference is recomputed with 2048 nodes, holding
+$\delta_{\mathrm{ref}}=0.0015625$ fixed. Every mesh-only run is compared with it on
+801 and 1601 nested primitive samples. The circle-well-signed studies are not
+rechecked: their mesh orders are 2.01 for both nonlinearities and metrics, as
+for powers.
+
+| $h$ | Problem | θ-L¹: baseline → finer | Primitive: baseline → finer | Primitive, 1601 samples |
+| --- | --- | --- | --- | --- |
+| $u^2+u^4$ | line-well-signed | 2.03 → 2.01 | 2.00 → 1.98 | 1.98 |
+| $u^2+u^4$ | line-sign-changing | 1.70 → 1.68 | 1.61 → 1.59 | 1.59 |
+| $u^2+u^4$ | circle-sign-changing | 2.04 → 2.02 | 1.81 → 1.77 | 1.77 |
+| $u^2+\lvert u\rvert^3$ | line-well-signed | 2.01 → 1.99 | 2.01 → 1.99 | 1.99 |
+| $u^2+\lvert u\rvert^3$ | line-sign-changing | 1.60 → 1.58 | 1.54 → 1.52 | 1.52 |
+| $u^2+\lvert u\rvert^3$ | circle-sign-changing | 1.72 → 1.67 | 1.45 → 1.41 | 1.41 |
+
+Doubling the primitive sampling changes no individual error by more than 0.1%.
+The level-by-level θ-L¹ slopes show what the finer reference changes:
+
+| Problem | $h$ | 1024-node reference | 2048-node reference |
+| --- | --- | --- | --- |
+| line | $u^2+u^4$ | 1.60, 1.68, 1.72, 1.81 | 1.60, 1.68, 1.70, 1.74 |
+| line | $u^2+\lvert u\rvert^3$ | 1.50, 1.57, 1.63, 1.73 | 1.49, 1.57, 1.61, 1.65 |
+| circle | $u^2+u^4$ | 2.07, 2.08, 2.02, 2.00 | 2.07, 2.08, 2.00, 1.92 |
+| circle | $u^2+\lvert u\rvert^3$ | 2.08, 1.79, 1.58, 1.45 | 2.08, 1.77, 1.52, 1.33 |
+
+* **Line.** The overshoot past the heuristic came from the reference. With the
+  finer one, the slopes rise toward $7/4$ (1.74) and $5/3$ (1.65) from below.
+  Their fitted orders are 1.68 and 1.58.
+* **Circle, $u^2+u^4$.** The finest slope now turns down (1.92). That fits the
+  reading above: the near-zero term begins to show only at the finest levels.
+* **Circle, $u^2+|u|^3$.** The slopes fall below $5/3$ and fall further with the
+  finer reference. The recorded $|u|^3$ run on this problem does the same
+  (1.49 at the finest level), so the cause is shared by both cubic-top fluxes.
+  A plausible explanation is an error floor from holding δ fixed in the
+  mesh-only runs. It has not been tested. This regime does not establish an
+  asymptotic rate.
+
+The heuristic $\Delta^{2-1/k_{\max}}$ is therefore consistent with the line
+measurements, but no measurement here establishes it.
 
 ## Cost
 
@@ -102,7 +141,12 @@ From the repository root:
 ```bash
 python convergence.py --flux "u^2+u^4" --flux "u^2+|u|^3" --levels 5 --depth 2 --no-plot \
     --max-events 5000000 --output docs/data/convergence-2026-11-05
-CHECK_COMMANDS
+python tools/normalise_flux_records.py docs/data/convergence-2026-11-05
+P="--problem line-well-signed --problem line-sign-changing --problem circle-sign-changing"
+python tools/check_mesh_reference.py docs/data/convergence-2026-11-05 --flux "u^2+u^4" $P \
+    --output docs/data/convergence-2026-11-05/checks/u2+u4.json
+python tools/check_mesh_reference.py docs/data/convergence-2026-11-05 --flux "u^2+|u|^3" $P \
+    --output docs/data/convergence-2026-11-05/checks/u2+u3.json
 python tools/plot_flux_convergence.py docs/data/convergence-2026-11-05 docs/convergence-2026-11-05.png
 ```
 
@@ -113,8 +157,8 @@ they recorded the nonlinearity under `h` and `power` as the default 2.0.
 label, `power: null`) and regenerated their CSVs. No measured value changed; this
 was checked against a copy. In every row, `h` is the mesh width.
 
-[Saved CSV and JSON records](data/convergence-2026-11-05/) contain 120 error rows
-and eight references. [Notebook 07](../notebooks/07_convergence.ipynb) plots the
+[Saved CSV and JSON records](data/convergence-2026-11-05/) contain 120 error rows,
+eight references, six finer spatial references and 30 mesh-check rows (`checks/`). [Notebook 07](../notebooks/07_convergence.ipynb) plots the
 recorded δ-only and mesh-only errors.
 
 Validation:
