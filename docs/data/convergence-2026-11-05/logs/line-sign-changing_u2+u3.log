@@ -1,1 +1,6 @@
 Running line-sign-changing, h=|u|^2 + |u|^3 (5 levels, reference depth 2)
+
+line-sign-changing_h-u2+u3 (h=|u|^2 + |u|^3): reference δ = 0.00156, 1024 nodes, 205242 events, 233.3 s
+  delta  order θ-L1  1.03   primitive  1.04
+  mesh   order θ-L1  1.60   primitive  1.54
+  joint  order θ-L1  1.03   primitive  1.16
