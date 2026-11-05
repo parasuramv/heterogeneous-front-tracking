@@ -291,7 +291,9 @@ monotone scalar functions:
   once. Log terms appear where exponents resonate (for $u^2+|u|^3$, $1/r$ integrates
   to $\log u$). Against 300-digit closed forms the factored $J$ is accurate to
   $8\cdot10^{-16}$ for $u\in[10^{-30},10^{30}]$ (**observed**).
-* Cost: about 2–3 ms per event for $u^2+u^4$, against about 0.05 ms for `PowerLaw`.
+* Cost: about 1 ms per event at the fine resolutions of the convergence studies,
+  and 2–3 ms on coarse meshes, where cells are long and more Gauss points are
+  needed. `PowerLaw` costs about 0.05–0.08 ms per event.
 
 `tests/test_general.py` checks the following:
 
@@ -482,6 +484,11 @@ The local interpolation argument suggests $O(\Delta^{2-1/p})$ beside a zero,
 from integrating $O(\Delta)|x-z|^{-1/p}$ over one cell. This remains a local
 heuristic, not a global dynamic rate: measured slopes depend on the problem,
 metric, resolution range and numerical reference.
+
+For a general $h$ (§3b) the same argument uses the exponent that governs $U$
+near the zero, the top degree $k_{\max}$ of a polynomial. On the line,
+[the general-flux report](convergence-2026-11-05.md) measures 1.60 for $u^2+|u|^3$,
+level by level equal to $|u|^3$, and 1.70 for $u^2+u^4$ (**observed**).
 
 ## 9. Homogenisation and the exact coordinate map
 

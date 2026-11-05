@@ -49,7 +49,8 @@ satisfies the Lax-type interface condition.
   there. No coordinate straightens the fronts unless $h$ is a power (§3b).
   The Riemann rule and "at most one outgoing front" are proved pointwise, the
   circle has no exact conjugacy, and convergence is measured, not proved.
-  Each event costs about 2–3 ms, against 0.05 ms for powers.
+  Each event costs about 1–3 ms (1 ms at the fine convergence resolutions),
+  roughly 10–40 times the power-law cost.
 * **Zeros of $g$ are transverse**, $|g'(z)|\ge\beta>0$ at every zero.
   `PiecewiseAffine.from_function` rejects detected tangential or numerically
   unresolved zeros ($x^2$, $x^3$, …). This is a sampling diagnostic, not a
@@ -234,7 +235,9 @@ of reference depth or sampling density.
 [The general-power convergence report](docs/convergence-2026-10-15.md) records
 five-level experiments for $p=3/2,3$ on all four line/circle and
 well-signed/sign-changing problems, with finer spatial-reference and sampling
-checks. The data and plots are numerical evidence, not convergence theorems.
+checks. [The general-flux report](docs/convergence-2026-11-05.md) does the same
+for $h=u^2+u^4$ and $u^2+|u|^3$. Near zeros the top degree sets the measured
+mesh rate. The data and plots are numerical evidence, not convergence theorems.
 Initial theta data are held fixed across powers; their physical $u$ profiles
 therefore vary with $p$.
 
@@ -243,7 +246,7 @@ therefore vary with $p$.
 The power-law baseline passes **92 unit/regression tests** and **420 deterministic
 randomized cases** (2026-10-15); the largest randomized mass-budget residual
 was $3.62\times10^{-10}$. With general convex $h$ (2026-11-05) the suite has
-**117 tests**. Power-law runs are bit-identical to the baseline on every example,
+**121 tests**. Power-law runs are bit-identical to the baseline on every example,
 and the 420 cases give the same residual.
 
 See [the audit report](docs/audit-2026-10-09.md) for reproduced defects,
