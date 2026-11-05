@@ -1,1 +1,6 @@
 Running line-well-signed, h=|u|^2 + |u|^3 (5 levels, reference depth 2)
+
+line-well-signed_h-u2+u3 (h=|u|^2 + |u|^3): reference δ = 0.00156, 1024 nodes, 230653 events, 244.4 s
+  delta  order θ-L1  1.03   primitive  1.03
+  mesh   order θ-L1  2.01   primitive  2.01
+  joint  order θ-L1  1.06   primitive  1.20

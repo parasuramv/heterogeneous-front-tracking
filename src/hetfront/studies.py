@@ -95,7 +95,7 @@ def reference_run(problem, delta, nodes, final_time=None):
     T = problem.final_time if final_time is None else final_time
     start = time.perf_counter()
     ref = problem.tracker(delta, nodes).run(T)
-    return ref, {"power": problem.power, "flux": _flux_label(problem), "final_time": T, "delta": delta,
+    return ref, {"power": _power(problem), "flux": _flux_label(problem), "final_time": T, "delta": delta,
                  "nodes": nodes, "max_events": problem.max_events, "events": ref.event_count,
                  "seconds": time.perf_counter() - start}
 
@@ -110,13 +110,18 @@ def refinement(problem, pairs, reference, *, samples=801):
         tr = problem.tracker(delta, nodes).run(reference.time)
         seconds = time.perf_counter() - start
         e_theta, e_prim = errors(tr, reference, problem.window, samples=samples)
-        rows.append({"power": problem.power, "flux": _flux_label(problem), "final_time": reference.time,
+        rows.append({"power": _power(problem), "flux": _flux_label(problem), "final_time": reference.time,
                      "samples": samples,
                      "delta": delta, "nodes": nodes,
                      "h": span / (nodes if problem.periodic else nodes - 1), "theta_l1": e_theta,
                      "primitive": e_prim, "fronts": tr.front_count(), "events": tr.event_count,
                      "seconds": seconds})
     return rows
+
+
+def _power(problem):
+    """The exponent p, or None when a general h overrides it."""
+    return None if problem.h is not None else problem.power
 
 
 def _flux_label(problem):

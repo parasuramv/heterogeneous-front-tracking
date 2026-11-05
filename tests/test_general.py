@@ -455,6 +455,7 @@ class EntryPointTests(unittest.TestCase):
         problem = replace(PROBLEMS["line-sign-changing"], h="u^2+u^4")
         study = standard_study(problem, levels=2, depth=1, coarse_delta=0.2, coarse_nodes=8, samples=41)
         self.assertEqual(study["reference"]["flux"], "|u|^2 + |u|^4")
+        self.assertIsNone(study["reference"]["power"])
         for kind in ("delta", "mesh", "joint"):
             self.assertTrue(all(row["flux"] == "|u|^2 + |u|^4" and np.isfinite(row["theta_l1"]) for row in study[kind]))
         mesh = [row["h"] for row in study["mesh"]]  # "h" stays the mesh width
