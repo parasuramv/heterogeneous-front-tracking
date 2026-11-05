@@ -1,0 +1,8 @@
+line-well-signed|u^2+u^4
+line-well-signed|u^2+|u|^3
+line-sign-changing|u^2+u^4
+line-sign-changing|u^2+|u|^3
+circle-sign-changing|u^2+u^4
+circle-sign-changing|u^2+|u|^3
+circle-well-signed|u^2+u^4
+circle-well-signed|u^2+|u|^3
