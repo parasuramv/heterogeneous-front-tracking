@@ -1,1 +1,6 @@
 Running circle-sign-changing, h=|u|^2 + |u|^3 (5 levels, reference depth 2)
+
+circle-sign-changing_h-u2+u3 (h=|u|^2 + |u|^3): reference δ = 0.00156, 1024 nodes, 228045 events, 322.8 s
+  delta  order θ-L1  0.97   primitive  0.84
+  mesh   order θ-L1  1.72   primitive  1.45
+  joint  order θ-L1  0.97   primitive  0.84
