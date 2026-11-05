@@ -421,5 +421,76 @@ class PublicFluxTests(unittest.TestCase):
             straight.corrector_l1(het, het)
 
 
+
+# ---------------------------------------------------------------------------
+# Examples, studies and command-line entry points (phase 4).
+# ---------------------------------------------------------------------------
+import csv  # noqa: E402
+import json  # noqa: E402
+from dataclasses import replace  # noqa: E402
+from pathlib import Path  # noqa: E402
+import subprocess  # noqa: E402
+import sys  # noqa: E402
+import tempfile  # noqa: E402
+
+from hetfront.examples import EXAMPLES  # noqa: E402
+from hetfront.studies import PROBLEMS, standard_study  # noqa: E402
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class EntryPointTests(unittest.TestCase):
+    def test_examples_choose_their_nonlinearity(self):
+        ex = EXAMPLES["poly-zeros"]
+        self.assertTrue(ex.build(delta=0.1, cells=10).flux.general)
+        self.assertEqual(ex.build(delta=0.1, cells=10, power=3.0).flux.power, 3.0)
+        self.assertEqual(EXAMPLES["two-zeros"].build(delta=0.1, cells=10, h="u^2+|u|^3").flux.nonlinearity,
+                         POLYS["u2+|u|3"])
+        with self.assertRaises(ValueError):
+            ex.build(delta=0.1, cells=10, power=3.0, h="u^2+u^4")
+        tr = ex.build(delta=0.1, cells=10).run(ex.final_time)
+        self.assertGreater(tr.counts["absorption"], 0)
+
+    def test_study_records_the_nonlinearity(self):
+        problem = replace(PROBLEMS["line-sign-changing"], h="u^2+u^4")
+        study = standard_study(problem, levels=2, depth=1, coarse_delta=0.2, coarse_nodes=8, samples=41)
+        self.assertEqual(study["reference"]["flux"], "|u|^2 + |u|^4")
+        for kind in ("delta", "mesh", "joint"):
+            self.assertTrue(all(row["flux"] == "|u|^2 + |u|^4" and np.isfinite(row["theta_l1"]) for row in study[kind]))
+        mesh = [row["h"] for row in study["mesh"]]  # "h" stays the mesh width
+        self.assertGreater(mesh[0], mesh[1])
+
+    def test_convergence_cli_with_flux(self):
+        with tempfile.TemporaryDirectory() as output:
+            subprocess.run([sys.executable, str(ROOT / "convergence.py"), "--problem", "line-sign-changing",
+                            "--flux", "u^2+u^4", "--flux", "|u|^3", "--levels", "2", "--depth", "1",
+                            "--samples", "41", "--no-plot", "--output", output],
+                           cwd=ROOT, check=True, capture_output=True, text=True)
+            names = sorted(p.name for p in Path(output).glob("*.json"))
+            self.assertEqual(names, ["convergence_line-sign-changing_h-u2+u4.json",
+                                     "convergence_line-sign-changing_p3p0.json"])
+            general = json.loads((Path(output) / names[0]).read_text())
+            self.assertIsNone(general["power"])
+            self.assertEqual(general["flux"], "|u|^2 + |u|^4")
+
+    def test_main_cli_writes_a_general_run(self):
+        with tempfile.TemporaryDirectory() as output:
+            done = subprocess.run([sys.executable, str(ROOT / "main.py"), "--example", "poly-zeros", "--delta", "0.1",
+                                   "--cells", "12", "--frames", "4", "--samples", "101", "--no-plot",
+                                   "--output", output], cwd=ROOT, check=True, capture_output=True, text=True)
+            self.assertIn("h(u) = |u|^2 + |u|^4", done.stdout)
+            residual = float(done.stdout.rsplit(":", 1)[1])
+            self.assertLess(abs(residual), 1e-12)
+            with open(Path(output) / "poly-zeros_pieces.csv") as handle:
+                rows = list(csv.DictReader(handle))
+            self.assertTrue(rows and all(r["kappa"] == "nan" for r in rows))
+            data = np.load(Path(output) / "poly-zeros.npz")
+            self.assertEqual(str(data["h"]), "|u|^2 + |u|^4")
+            bad = subprocess.run([sys.executable, str(ROOT / "main.py"), "--example", "poly-zeros", "--flux",
+                                  "u log u", "--no-plot", "--output", output], cwd=ROOT, capture_output=True, text=True)
+            self.assertNotEqual(bad.returncode, 0)
+            self.assertIn("--flux", bad.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

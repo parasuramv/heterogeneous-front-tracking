@@ -34,6 +34,7 @@ def parse(argv):
     p.add_argument("--nodes", type=int, help="nodes of the g mesh")
     p.add_argument("--cells", type=int, help="cells used to sample the initial data")
     p.add_argument("--power", type=float, help="p in h(u) = |u|^p, p > 1 (default: the example's)")
+    p.add_argument("--flux", help="general convex h, e.g. 'u^2+u^4' or '|u|^3 + 0.5u^2' (overrides --power)")
     p.add_argument("--interface-layer", type=float, default=0.0, help="θ = 0 within this distance of zeros")
     p.add_argument("--samples", type=int, default=801, help="spatial samples of the colour field")
     p.add_argument("--frames", type=int, default=151, help="observation times")
@@ -52,7 +53,16 @@ def main(argv=None):
     example = EXAMPLES[args.example]
     if args.power is not None and not (math.isfinite(args.power) and args.power > 1):
         raise SystemExit("--power must be finite and greater than 1")
-    tracker = example.build(args.delta, args.nodes, args.cells, args.power,
+    if args.flux is not None and args.power is not None:
+        raise SystemExit("give either --power or --flux, not both")
+    h = None
+    if args.flux is not None:
+        from hetfront.nonlinearity import parse as parse_h
+        try:
+            h = parse_h(args.flux).validate()
+        except (ValueError, ArithmeticError) as error:
+            raise SystemExit(f"--flux: {error}")
+    tracker = example.build(args.delta, args.nodes, args.cells, args.power, h,
                             interface_layer=args.interface_layer, max_events=args.max_events)
     final = example.final_time if args.time is None else args.time
     if final < 0:

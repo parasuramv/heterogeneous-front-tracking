@@ -37,6 +37,7 @@ class Problem:
     periodic: bool = False
     power: float = 2.0     # theta data stay fixed; physical initial profiles vary with p
     max_events: int = 1_000_000
+    h: object = None       # general convex h (string or Nonlinearity); overrides power
 
     def heterogeneity(self, nodes):
         if self.periodic:
@@ -46,7 +47,10 @@ class Problem:
 
     def tracker(self, delta, nodes, **kwargs):
         kwargs.setdefault("max_events", self.max_events)
-        flux = MultiplicativeFlux(self.heterogeneity(nodes), delta, power=self.power)
+        if self.h is not None:
+            flux = MultiplicativeFlux(self.heterogeneity(nodes), delta, h=self.h)
+        else:
+            flux = MultiplicativeFlux(self.heterogeneity(nodes), delta, power=self.power)
         cls = PeriodicHeteroFrontTracker if self.periodic else HeteroFrontTracker
         return cls.from_theta(flux, self.positions, self.theta, record_history=False, **kwargs)
 
@@ -91,7 +95,7 @@ def reference_run(problem, delta, nodes, final_time=None):
     T = problem.final_time if final_time is None else final_time
     start = time.perf_counter()
     ref = problem.tracker(delta, nodes).run(T)
-    return ref, {"power": problem.power, "final_time": T, "delta": delta,
+    return ref, {"power": problem.power, "flux": _flux_label(problem), "final_time": T, "delta": delta,
                  "nodes": nodes, "max_events": problem.max_events, "events": ref.event_count,
                  "seconds": time.perf_counter() - start}
 
@@ -106,12 +110,19 @@ def refinement(problem, pairs, reference, *, samples=801):
         tr = problem.tracker(delta, nodes).run(reference.time)
         seconds = time.perf_counter() - start
         e_theta, e_prim = errors(tr, reference, problem.window, samples=samples)
-        rows.append({"power": problem.power, "final_time": reference.time, "samples": samples,
+        rows.append({"power": problem.power, "flux": _flux_label(problem), "final_time": reference.time,
+                     "samples": samples,
                      "delta": delta, "nodes": nodes,
                      "h": span / (nodes if problem.periodic else nodes - 1), "theta_l1": e_theta,
                      "primitive": e_prim, "fronts": tr.front_count(), "events": tr.event_count,
                      "seconds": seconds})
     return rows
+
+
+def _flux_label(problem):
+    """The nonlinearity as text: '|u|^p' for a power, else h's canonical form."""
+    from .nonlinearity import Power, parse
+    return str(Power(problem.power) if problem.h is None else parse(problem.h))
 
 
 def fitted_order(x, y):

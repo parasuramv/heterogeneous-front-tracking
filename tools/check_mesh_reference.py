@@ -11,6 +11,7 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from hetfront.nonlinearity import parse as parse_h
 from hetfront.studies import PROBLEMS, errors, fitted_order, reference_run
 
 
@@ -19,6 +20,7 @@ def main():
     parser.add_argument("directory", type=Path, help="directory of baseline convergence JSON files")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--power", type=float, action="append", help="optional exponent filter; repeat as needed")
+    parser.add_argument("--flux", action="append", help="optional general-h filter such as 'u^2+u^4'; repeat as needed")
     parser.add_argument("--max-events", type=int, default=5_000_000)
     args = parser.parse_args()
     if args.max_events < 1:
@@ -26,14 +28,20 @@ def main():
     paths = sorted(args.directory.glob("convergence_*.json"))
     if not paths:
         parser.error("no baseline convergence records found")
+    wanted = {str(parse_h(spec)) for spec in args.flux or []}
     records = []
     for path in paths:
         baseline = json.loads(path.read_text())
-        if args.power and baseline["power"] not in args.power:
+        general = baseline.get("power") is None
+        if args.power and (general or baseline["power"] not in args.power):
             continue
-        problem = replace(PROBLEMS[baseline["problem"]], power=baseline["power"], max_events=args.max_events)
+        if args.flux and (not general or baseline["flux"] not in wanted):
+            continue
+        setting = {"h": baseline["flux"]} if general else {"power": baseline["power"]}
+        problem = replace(PROBLEMS[baseline["problem"]], max_events=args.max_events, **setting)
+        label = f"h={baseline['flux']}" if general else f"p={problem.power:g}"
         settings = baseline["reference"]
-        print(f"Checking {problem.name}, p={problem.power:g}", flush=True)
+        print(f"Checking {problem.name}, {label}", flush=True)
         reference, info = reference_run(problem, settings["delta"], 2 * settings["nodes"],
                                         final_time=settings["final_time"])
         samples = baseline["samples"]
@@ -47,16 +55,17 @@ def main():
         h = [r["h"] for r in rows]
         orders = {metric: fitted_order(h, [r[metric] for r in rows])
                   for metric in ("theta_l1", "primitive", "primitive_dense")}
-        records.append({"baseline": path.name, "problem": problem.name, "power": problem.power,
+        records.append({"baseline": path.name, "problem": problem.name,
+                        "power": None if general else problem.power, "flux": baseline.get("flux"),
                         "samples": samples, "dense_samples": 2 * samples - 1,
                         "reference": info, "mesh": rows, "orders": orders})
         # Preserve completed cases if a later expensive reference fails.
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(records, indent=2, allow_nan=False) + "\n")
-        print(f"{problem.name}, p={problem.power:g}: {orders}", flush=True)
+        print(f"{problem.name}, {label}: {orders}", flush=True)
 
     if not records:
-        parser.error("no baseline records match the requested powers")
+        parser.error("no baseline records match the requested powers or fluxes")
 
 
 if __name__ == "__main__":

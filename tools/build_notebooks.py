@@ -173,9 +173,10 @@ def playground():
 
     delta = 0.01                 # flux-level spacing: θ takes values in δZ
     power = 2.0                  # p in h(u) = |u|^p, p > 1 (2: the flux g u², as in the manuscript)
+    flux_h = None                # or a general convex h, e.g. "u^2+u^4" or "|u|^3 + 0.5u^2" (overrides power)
 
     def u0(x):
-        """Initial data, sampled at cell midpoints as θ = sgn(u) g_Δ(x) |u|^p."""
+        """Initial data, sampled at cell midpoints as θ = sgn(u) g_Δ(x) h(u)."""
         return np.where(np.abs(x) < 1.5, np.cos(2 * x), 0.0)
 
     data_window = (-1.5, 1.5)    # line only: where u0 is sampled (outside: edge levels)
@@ -194,7 +195,11 @@ def playground():
         g_delta = PiecewiseAffine.from_function(g, grid, period=period, beta=beta)
     else:
         g_delta = PiecewiseAffine.from_function(g, np.linspace(*mesh, nodes), beta=beta)
-    flux = MultiplicativeFlux(g_delta, delta, power)
+    if flux_h is None:
+        flux = MultiplicativeFlux(g_delta, delta, power)
+    else:
+        flux = MultiplicativeFlux(g_delta, delta, h=flux_h)
+    print("h(u) =", flux.nonlinearity)
 
     def make_tracker():
         if periodic:
@@ -219,7 +224,7 @@ def playground():
     print(f"mass budget residual: {budget[-1] - budget[0]:.2e}")
     ''')
     cells = [
-        md("# Heterogeneous front tracking playground\n\nChoose a heterogeneity $g$, a level spacing δ, initial data and a window, then explore the fronts of $u_t + (g(x)|u|^p)_x = 0$, $p>1$ (default $p=2$)."),
+        md("# Heterogeneous front tracking playground\n\nChoose a heterogeneity $g$, a level spacing δ, initial data and a window, then explore the fronts of $u_t + (g(x)h(u))_x = 0$ with $h=|u|^p$, $p>1$ (default $p=2$), or a general convex $h$ such as $u^2+u^4$ (`flux_h`)."),
         md(INTRO), SETUP, BOOTSTRAP, IMPORTS, md(PICTURES),
         md("## 1. Define your experiment"), parameters,
         md("Initial data can also be given directly as flux levels: `HeteroFrontTracker.from_theta(flux, positions, theta_values)` with N breakpoints and N+1 values (circle: N and N). Levels are rounded to δZ."),
@@ -256,7 +261,8 @@ def playground():
         plt.close(fig)
         np.savez_compressed(out / "solution.npz", x=history.x, times=history.times,
                             levels=history.levels, theta=history.theta, u=history.u,
-                            delta=delta, power=power, nodes=g_delta.nodes, g_values=g_delta.values)
+                            delta=delta, power=np.nan if flux.general else flux.power,
+                            h=str(flux.nonlinearity), nodes=g_delta.nodes, g_values=g_delta.values)
         print(sorted(p.name for p in out.iterdir()))
         '''),
     ]
@@ -270,7 +276,7 @@ def examples():
         md(INTRO), SETUP, BOOTSTRAP, IMPORTS, md(PICTURES),
         code('''
         from hetfront.examples import EXAMPLES
-        chosen = ["xu2-blowup", "xu2-shock", "two-zeros", "sine", "circle-sine", "circle-zeros"]
+        chosen = ["xu2-blowup", "xu2-shock", "two-zeros", "poly-zeros", "sine", "circle-sine", "circle-zeros"]
         histories = {}
         for name in chosen:
             ex = EXAMPLES[name]
@@ -284,6 +290,7 @@ def examples():
         ("xu2-blowup", "### g = x: blow-up from bounded data\nCharacteristics $q_0(1-t)^2$ (dotted) all reach the zero at $t=1$: $u=-1/(1-t)$ blows up there, while θ stays bounded. Fronts are absorbed by the interface."),
         ("xu2-shock", "### g = x: the shock $y(t) = -(t-2)^2/4$\nThe manuscript's bounded datum for non-uniqueness. The shock reaches the zero at $t=2$; the front-tracking (selected) continuation is stationary afterwards."),
         ("two-zeros", "### Three transverse zeros\n$g = x(1-x^2)$ splits the line into four sign intervals that evolve independently."),
+        ("poly-zeros", "### A general convex flux, $h = u^2 + u^4$\nThe same three zeros with a polynomial flux: quadratic for small $u$, quartic near the zeros, where $u$ blows up like $|x-z|^{-1/4}$. No coordinate straightens these fronts; their event times are closed-form arrival times and monotone roots (derivation §3b)."),
         ("sine", "### Well-signed $g = 2 + \\sin 3x$\nNo interfaces: front tracking in the sense of HetFT, with curved fronts crossing many corners."),
         ("circle-sine", "### The circle, well-signed\nFronts circulate through the seam; total mass is conserved exactly."),
         ("circle-zeros", "### The circle with zeros\n$g = \\sin 2\\pi x$: two interfaces and two independent sign arcs."),
@@ -587,6 +594,66 @@ def straightening():
         ax.set(xlabel="x", ylabel="t", title="Shock into the zero of g = x (thick: exact)")
         ax.legend(frameon=False)
         plt.show()
+        '''),
+        md(r'''
+        ## General convex $h$: no straightening coordinate
+
+        `MultiplicativeFlux(g, delta, h="u^2+u^4")` accepts any even, strictly convex
+        $h$ with $h(0)=0$ and power-type growth $h(r)\gtrsim r^k$, $k>1$. The
+        stationary profile $U[\theta]=\eta\,\mathrm{sgn}\,\theta\,H(|\theta|/|g|)$,
+        $H=h^{-1}$, no longer factors as $s(\theta)\rho(x)$. No coordinate makes
+        all fronts straight: that would need the characteristic speeds
+        $\gamma h'(H(\theta/\gamma))$, $\gamma=|g_\Delta|$, to factor as $a(\theta)b(\gamma)$,
+        and this forces $h=c|u|^p$ (derivation §3b). The left panel shows the
+        speed ratio of two levels, which is constant only for a power.
+
+        What survives is a closed-form *arrival time*. With $J(u)=\int_u^\infty dr/h$
+        and $Q=u+hJ$, the primitive $P(\theta,\gamma)=\gamma\,Q(H(\theta/\gamma))$ gives
+
+        $$\alpha\,\big(|\theta_R|-|\theta_L|\big)\,(t_1-t_0)=\Big[P(\theta_R,\gamma)-P(\theta_L,\gamma)\Big]_{\gamma_0}^{\gamma_1}.$$
+
+        Node, corner and absorption times are explicit. Positions at a given
+        time and meeting times are monotone scalar roots, solved by Newton
+        with the exact derivative. The right panel follows the front of the
+        power-law cell above, now for $u^2+u^4$, and compares it with RK4 for
+        the physical Rankine–Hugoniot ODE.
+        '''),
+        code('''
+        from hetfront.nonlinearity import Power
+        from hetfront.trajectory import GeneralLaw
+
+        def rk4_general(flux, kL, kR, x0, T, steps):
+            h = flux.nonlinearity
+            def speed(x):
+                uL, uR = flux.u(kL, x), flux.u(kR, x)
+                return flux.g(x) * (h(uR) - h(uL)) / (uR - uL)
+            x, dt = x0, T / steps
+            for _ in range(steps):
+                k1 = speed(x); k2 = speed(x + dt * k1 / 2); k3 = speed(x + dt * k2 / 2); k4 = speed(x + dt * k3)
+                x += dt * (k1 + 2 * k2 + 2 * k3 + k4) / 6
+            return x
+
+        fig, axes = plt.subplots(1, 2, figsize=(13, 4), constrained_layout=True)
+        gammas = np.geomspace(1e-2, 1e2, 200)
+        for law, label in ((GeneralLaw(Power(3)), "|u|³"), (GeneralLaw("u^2+u^4"), "u² + u⁴")):
+            ratio = [law.speed(law.characteristic_coef(1.0), g) / law.speed(law.characteristic_coef(4.0), g)
+                     for g in gammas]
+            axes[0].semilogx(gammas, ratio, lw=2, label=label)
+        axes[0].set(xlabel="γ = |g_Δ|", ylabel="speed(θ = 1) / speed(θ = 4)",
+                    title="Characteristic speed ratio")
+        axes[0].legend(frameon=False)
+        fpoly = MultiplicativeFlux(gd, 0.1, h="u^2+u^4")
+        tp = HeteroFrontTracker(fpoly, [-2.5], [30, 5]).run(1.5)
+        for i, piece in enumerate(tp.pieces_until()):
+            xs, ts = fpoly.law.sample_path(piece.x0, piece.s0, piece.alpha, piece.kappa, piece.t0, piece.t1, 40)
+            axes[1].plot(xs, ts, color="C3", lw=2, label="u² + u⁴ (closed-form arrival times)" if i == 0 else None)
+        for xn in gd.nodes:
+            axes[1].axvline(xn, color="0.85", lw=0.8, zorder=0)
+        axes[1].set(xlabel="x", ylabel="t", title="One front, h = u² + u⁴ (θ: 3.0 → 0.5)")
+        axes[1].legend(frameon=False)
+        plt.show()
+        gap = abs(rk4_general(fpoly, 30, 5, -2.5, 1.5, 4000) - tp.fronts[0].x(1.5))
+        print(f"u² + u⁴: corners {tp.counts['corner']:2d}, |x_RK4 - x_closed| = {gap:.1e}")
         '''),
     ]
     write("04_straightening_and_corners.ipynb", cells)
@@ -952,6 +1019,39 @@ def convergence():
                 ax.xaxis.set_minor_formatter(NullFormatter())
                 ax.grid(True, which="both", alpha=.3)
                 ax.legend(fontsize=8)
+            plt.show()
+        '''),
+        md(r'''
+        ## Recorded general convex fluxes
+
+        Five-level studies for $h=u^2+u^4$ and $h=u^2+|u|^3$ on the same four
+        problems and theta data are recorded in
+        [the general-flux report](../docs/convergence-2026-11-05.md). Both
+        nonlinearities are uniformly convex ($h''\ge2$), unlike $|u|^p$ for
+        $p\ne2$. Near a zero the top degree sets the blow-up rate. Below are the
+        recorded δ-only and mesh-only errors.
+        '''),
+        code('''
+        general_dir = local_src.parent / "docs/data/convergence-2026-11-05" if local_src else None
+        general = [json.loads(path.read_text()) for path in sorted(general_dir.glob("*.json"))] if general_dir else []
+        if not general:
+            print("Recorded results require the repository checkout; see the general-flux report.")
+        else:
+            fig, axes = plt.subplots(2, 4, figsize=(18, 8), constrained_layout=True)
+            for col, name in enumerate(PROBLEMS):
+                for row, kind in enumerate(("delta", "mesh")):
+                    ax = axes[row, col]
+                    for record in general:
+                        if record["problem"] != name:
+                            continue
+                        rows = record[kind]
+                        x = [r["h"] if kind == "mesh" else r["delta"] for r in rows]
+                        err = [r["theta_l1"] for r in rows]
+                        ax.loglog(x, err, "o-", label=f"{record['flux']}: {fitted_order(x, err):.2f}")
+                    ax.set(title=f"{name}, {'Δ' if kind == 'mesh' else 'δ'} only",
+                           xlabel="mesh width Δ" if kind == "mesh" else "δ", ylabel="θ-L¹ error")
+                    ax.grid(True, which="both", alpha=.3)
+                    ax.legend(fontsize=8)
             plt.show()
         '''),
     ]

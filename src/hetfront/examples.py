@@ -2,8 +2,9 @@
 
 Each ``Example`` builds a fresh tracker from three resolution parameters:
 δ (flux-level spacing), the number of g-mesh nodes, and the number of data
-cells. It also records an observation window, a final time and the power p of
-h(u) = |u|^p. The xu² examples are exact solutions only for p = 2.
+cells. It also records an observation window, a final time and the
+nonlinearity: the power p of h(u) = |u|^p, or a general convex ``h`` such as
+"u^2+u^4". The xu² examples are exact solutions only for p = 2.
 """
 
 from dataclasses import dataclass, field
@@ -31,6 +32,7 @@ class Example:
     defaults: dict = field(default_factory=lambda: {"delta": 0.01, "nodes": 81, "cells": 120})
     characteristic_starts: tuple = ()
     power: float = 2.0
+    h: object = None            # general convex h (string or Nonlinearity); overrides power
 
     def heterogeneity(self, nodes=None):
         nodes = self.defaults["nodes"] if nodes is None else int(nodes)
@@ -40,11 +42,20 @@ class Example:
             return PiecewiseAffine.from_function(self.g, grid, period=period)
         return PiecewiseAffine.from_function(self.g, np.linspace(*self.mesh, nodes), extend=self.extend)
 
-    def build(self, delta=None, nodes=None, cells=None, power=None, **kwargs):
+    def flux(self, delta=None, nodes=None, power=None, h=None):
+        """The example's flux; an explicit ``power`` or ``h`` overrides its own nonlinearity."""
         delta = self.defaults["delta"] if delta is None else float(delta)
+        if power is not None and h is not None:
+            raise ValueError("give either power or h, not both")
+        if power is None and h is None:
+            power, h = self.power, self.h
+        if h is not None:
+            return MultiplicativeFlux(self.heterogeneity(nodes), delta, h=h)
+        return MultiplicativeFlux(self.heterogeneity(nodes), delta, power)
+
+    def build(self, delta=None, nodes=None, cells=None, power=None, h=None, **kwargs):
         cells = self.defaults["cells"] if cells is None else int(cells)
-        power = self.power if power is None else power
-        flux = MultiplicativeFlux(self.heterogeneity(nodes), delta, power)
+        flux = self.flux(delta, nodes, power, h)
         if isinstance(self.data, tuple) and self.data[0] == "steps":
             _, positions, theta = self.data
             cls = PeriodicHeteroFrontTracker if self.periodic else HeteroFrontTracker
@@ -101,6 +112,18 @@ EXAMPLES = {
         "like |x - z|^(-2/3).",
         lambda x: x * (1 - x * x), (-2, 2), (-2.5, 2.5), 2.0,
         lambda x: np.where(np.abs(x) < 1.8, 0.6 * np.sin(2 * x), 0.0), power=1.5),
+    "poly-zeros": Example(
+        "poly-zeros", "g = x(1 - x²) with h(u) = u² + u⁴: quadratic for small u, quartic near "
+        "the absorbing zeros, where u blows up like |x - z|^(-1/4). No coordinate straightens "
+        "the fronts; event times are closed-form arrival times and monotone roots.",
+        lambda x: x * (1 - x * x), (-2, 2), (-2.5, 2.5), 2.0,
+        lambda x: np.where(np.abs(x) < 1.8, 1.2 * np.sin(2 * x), 0.0), h="u^2+u^4",
+        defaults={"delta": 0.02, "nodes": 41, "cells": 60}),
+    "poly-sine": Example(
+        "poly-sine", "Well-signed g = 2 + sin 3x with h(u) = u² + |u|³ (uniformly convex, unlike "
+        "|u|³): the sine pulse with a flux that steepens at large amplitude.",
+        lambda x: 2 + np.sin(3 * x), (-6, 6), (-3, 4), 3.0, _pulse, h="u^2+|u|^3",
+        defaults={"delta": 0.02, "nodes": 41, "cells": 60}),
     "circle-sine": Example(
         "circle-sine", "Well-signed g = 2 + sin x on the circle of length 2π; fronts circulate "
         "and total mass is conserved exactly.",

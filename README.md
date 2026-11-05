@@ -14,6 +14,13 @@ lines; for $p=2$, $\sigma=\sqrt{|g_\Delta|}$ and in $x$ they are parabolas in
 time. Every event time is the root of a *linear* equation, and no ODE solver
 is used.
 
+General convex nonlinearities $h$ are supported too:
+$u_t+(g(x)h(u))_x=0$ with, for example, $h=u^2+u^4$ or $u^2+|u|^3$
+(`MultiplicativeFlux(g, delta, h="u^2+u^4")`). Only power laws admit a
+straightening coordinate. For a general $h$, arrival times at nodes and zeros stay
+in closed form, while positions and meeting times become monotone scalar
+roots ([derivation §3b](docs/derivation.md#3b-general-convex-h)).
+
 The work extends the heterogeneous front tracking of HetFT (Venkatesh, *Indian
 J. Pure Appl. Math.*, 2026) and the *Failure of uniqueness* manuscript to
 sign-changing $g$. There, zeros of $g$ are absorbing interfaces, $u$ can blow
@@ -34,6 +41,15 @@ satisfies the Lax-type interface condition.
   shock/fan rule follows instead from an exact conjugacy to homogeneous front
   tracking on each sign interval (§5). Convergence has been measured for
   $p=3/2,2,3$; these experiments do not prove a continuum limit.
+* **General convex $h$** (`h="u^2+u^4"`, a `nonlinearity.Nonlinearity`, or a
+  string such as `"|u|^3 + 0.5u^2"`). $h$ must be even, with $h(0)=0$, strictly
+  convex, and of power type at infinity, $h(r)\gtrsim r^k$ with $k>1$. That is
+  slightly stronger than the Osgood condition $\int^\infty dr/h<\infty$, which
+  decides whether zeros are reached in finite time and profiles stay integrable
+  there. No coordinate straightens the fronts unless $h$ is a power (§3b).
+  The Riemann rule and "at most one outgoing front" are proved pointwise, the
+  circle has no exact conjugacy, and convergence is measured, not proved.
+  Each event costs about 2–3 ms, against 0.05 ms for powers.
 * **Zeros of $g$ are transverse**, $|g'(z)|\ge\beta>0$ at every zero.
   `PiecewiseAffine.from_function` rejects detected tangential or numerically
   unresolved zeros ($x^2$, $x^3$, …). This is a sampling diagnostic, not a
@@ -79,13 +95,13 @@ The full derivation, with the observed convergence orders, is in
 
 | Notebook | Contents |
 | --- | --- |
-| [01 · Playground](notebooks/01_playground.ipynb) | Your own $g$, δ, power $p$, mesh, data, line or circle; space–time plots, a time slider, snapshots, export |
-| [02 · Ready-to-run examples](notebooks/02_ready_to_run_examples.ipynb) | xu² blow-up, the shock $-(t-2)^2/4$, three zeros, well-signed sine, two circle cases |
+| [01 · Playground](notebooks/01_playground.ipynb) | Your own $g$, δ, power $p$ or convex $h$, mesh, data, line or circle; space–time plots, a time slider, snapshots, export |
+| [02 · Ready-to-run examples](notebooks/02_ready_to_run_examples.ipynb) | xu² blow-up, the shock $-(t-2)^2/4$, three zeros, the same with $h=u^2+u^4$, well-signed sine, two circle cases |
 | [03 · Stationary profiles and the Riemann problem](notebooks/03_riemann_problem.ipynb) | Profiles $U[\theta]$, one θ-rule for both signs of $g$, δ-fans versus exact characteristics |
-| [04 · Straightening and passive corners](notebooks/04_straightening_and_corners.ipynb) | Fronts straight in σ, closed form versus RK4, continuity at corners, no division by α, general powers $h=\lvert u\rvert^p$ |
+| [04 · Straightening and passive corners](notebooks/04_straightening_and_corners.ipynb) | Fronts straight in σ, closed form versus RK4, continuity at corners, no division by α, general powers $h=\lvert u\rvert^p$, general convex $h$ and why nothing straightens it |
 | [05 · Interactions](notebooks/05_interactions.ipynb) | Event loop, Theorem 2.4 invariants, event statistics and cost, agreement with `fronttrack` |
 | [06 · Zeros and non-uniqueness](notebooks/06_zeros_and_nonuniqueness.ipynb) | Absorption, blow-up, the selected solution versus the family $u_\lambda$, mass budget, interface layer |
-| [07 · Convergence](notebooks/07_convergence.ipynb) | Empirical orders in δ and Δ, selectable power, line and circle; recorded general-power studies |
+| [07 · Convergence](notebooks/07_convergence.ipynb) | Empirical orders in δ and Δ, selectable power, line and circle; recorded general-power and general-flux studies |
 | [08 · The circle](notebooks/08_circle.ipynb) | Wraparound, exact mass, signed effective flux, exact spatial conjugacy, stationary corrector bound, resolution-controlled homogenisation experiments, sign arcs |
 
 Notebooks 01 and 02 include the solver and can run independently in Jupyter
@@ -104,8 +120,11 @@ python -m unittest discover -s tests -t . -v
 python main.py --list
 python main.py --example xu2-blowup
 python main.py --example two-zeros --power 1.5
+python main.py --example poly-zeros                       # h = u² + u⁴
+python main.py --example two-zeros --flux "u^2+|u|^3"
 python convergence.py
 python convergence.py --power 1.5 --power 3 --max-events 5000000
+python convergence.py --flux "u^2+u^4" --problem line-sign-changing
 ```
 
 `main.py --example NAME` writes the following to `results/`:
@@ -115,12 +134,15 @@ python convergence.py --power 1.5 --power 3 --max-events 5000000
 - `NAME_pieces.csv`: every closed-form front piece;
 - `NAME_diagnostics.csv`: front count, TV(θ), mass, absorbed mass and edge inflow.
 
-Options: `--delta`, `--nodes`, `--cells`, `--power`, `--time`,
+Options: `--delta`, `--nodes`, `--cells`, `--power`, `--flux`, `--time`,
 `--interface-layer`, `--frames`, `--samples`, `--max-events`, `--output`,
 `--no-plot`. The examples are `sine`, `burgers`, `xu2-shock`, `xu2-blowup`,
-`two-zeros`, `power-sine` ($p=3$), `power-zeros` ($p=3/2$), `circle-sine`,
-`circle-zeros` and `circle-homogenisation`. `--power` overrides an example's
-$p$; the xu² examples are exact solutions only for $p=2$.
+`two-zeros`, `power-sine` ($p=3$), `power-zeros` ($p=3/2$), `poly-zeros`
+($h=u^2+u^4$), `poly-sine` ($h=u^2+|u|^3$), `circle-sine`, `circle-zeros` and
+`circle-homogenisation`. `--power` or `--flux` overrides an example's
+nonlinearity; the xu² examples are exact solutions only for $p=2$. For a
+general $h$, `sigma0` in the pieces CSV is $|g_\Delta|$ and `kappa` is empty
+(the coefficient is the pair of levels).
 
 `explore.py` is a small editable script that opens a figure.
 
@@ -134,6 +156,7 @@ from hetfront.visualization import observe_tracker, overview
 g = PiecewiseAffine.from_function(lambda x: x * (1 - x**2), np.linspace(-2, 2, 41))  # zeros become nodes
 flux = MultiplicativeFlux(g, delta=0.01)                                             # θ ∈ δZ, h = u²
 # MultiplicativeFlux(g, delta=0.01, power=3) gives h(u) = |u|³
+# MultiplicativeFlux(g, delta=0.01, h="u^2+u^4") gives a general convex h
 tracker = HeteroFrontTracker.from_function(flux, lambda x: np.cos(2 * x), window=(-1.5, 1.5), cells=90)
 history = observe_tracker(tracker, np.linspace(-2.5, 2.5, 801), np.linspace(0, 2, 121))
 overview(history)
@@ -185,7 +208,14 @@ Two options handle zeros of $g$:
   - a full-circle triple collision;
   - for $p\ne2$, the exact solution $x(t)=(1-qt)^{m}$ into a zero, the
     physical Rankine–Hugoniot speed, and exact conjugacy with the effective
-    flux $\eta\langle|g|^{-1/p}\rangle^{-p}|v|^p$ on the circle.
+    flux $\eta\langle|g|^{-1/p}\rangle^{-p}|v|^p$ on the circle;
+  - for general $h$, the following (`tests/test_general.py`):
+    - the generic numerics against the power-law tracker;
+    - RK4 of the physical speed;
+    - meeting times against bisection;
+    - the Osgood absorption time of a characteristic;
+    - mass budgets through absorption, $L^1$ contraction and exact cell integrals;
+    - the factored $J$ against closed forms.
 * Optional reference-solver tests compare the constant-coefficient case with
   `fronttrack` on the line (for $u^2$ and $|u|^p$) and `fronttrack.periodic` on the circle. They are skipped
   when those packages are unavailable; neither is a runtime dependency.
@@ -210,9 +240,11 @@ therefore vary with $p$.
 
 ## Audit and maintenance
 
-The current baseline passes **92 unit/regression tests** and **420 deterministic
+The power-law baseline passes **92 unit/regression tests** and **420 deterministic
 randomized cases** (2026-10-15); the largest randomized mass-budget residual
-was $3.62\times10^{-10}$.
+was $3.62\times10^{-10}$. With general convex $h$ (2026-11-05) the suite has
+**117 tests**. Power-law runs are bit-identical to the baseline on every example,
+and the 420 cases give the same residual.
 
 See [the audit report](docs/audit-2026-10-09.md) for reproduced defects,
 the theory verdict, verification evidence, and remaining scope limits.

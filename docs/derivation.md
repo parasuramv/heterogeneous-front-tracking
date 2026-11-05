@@ -22,6 +22,12 @@ on the line or on a circle $\mathbb R/L\mathbb Z$.
   manuscript. §3 ends with the general-$p$ laws (`MultiplicativeFlux(...,
   power=p)`), and §§5–6 and §9 note what changes. The $p=2$ code path is the
   original quadratic one, unchanged.
+* **(A1′) General convex $h$** (`MultiplicativeFlux(..., h="u^2+u^4")`, §3b).
+  $h$ is even, $h(0)=0$, strictly convex on $[0,\infty)$, and of power type
+  at infinity: $h(r)\gtrsim r^k$ for some $k>1$. Power-type growth is slightly
+  stronger than the Osgood condition $\int^\infty dr/h<\infty$, which is the
+  real dividing line for the zeros (§6). A nonzero minimum of $h$ is excluded:
+  it would add the source $m\,g'(x)$. Asymmetric $h_+\ne h_-$ is not implemented.
 * **(A2) Transverse zeros.** $g$ is Lipschitz with finitely many zeros on
   compact sets, and at each zero $z$, $|g'(z\pm)| \ge \beta > 0$. Tangential
   zeros (for example $g = x^2$ or $x^3$), when detected, are rejected by
@@ -190,9 +196,110 @@ These laws are elementary consequences of the Rankine–Hugoniot condition
 (**proved** above). `tests/test_power.py` checks them against RK4 integration
 of the physical ODE $\dot x=[g|u|^p]/[u]$ across many corners, against the
 exact solution just given, and, for constant $g$, against `fronttrack` with
-the flux $b|u|^p$. For a general convex $h$, the front ODE
-$\dot x = F(g(x))$ on an affine cell still reduces to the quadrature
-$\mathrm dt = \mathrm dg/(aF(g))$, but it is no longer linear in a power of $g$.
+the flux $b|u|^p$. For a general convex $h$ the front ODE on an affine cell
+still integrates in closed form, but no longer linearly in any power of $g$;
+see §3b.
+
+## 3b. General convex $h$
+
+Under (A1′) write $H=h^{-1}$ on $[0,\infty)$, $\gamma=|g_\Delta|$ (affine on a cell,
+slope $\alpha$), $\eta=\mathrm{sgn}\,g$. The stationary profile of level $\theta$ is
+
+$$U[\theta](x)=\eta\,\mathrm{sgn}(\theta)\,H\big(|\theta|/\gamma(x)\big),\qquad f=\eta|\theta|,$$
+
+so $\mathrm{sgn}\,\theta$ is still the direction of the characteristic speed
+$f_u=\gamma\,h'(H(|\theta|/\gamma))\,\mathrm{sgn}\,\theta$, on either sign of $g$.
+
+**Proposition (no straightening coordinate).** Suppose a $C^1$ coordinate
+$\sigma(\gamma)$ makes every characteristic a straight line in $(\sigma,t)$ on every
+affine cell. Then $h=c|u|^p$.
+
+*Proof.* Along a characteristic $\dot\sigma=\sigma'(\gamma)\,\alpha\,\gamma h'(H(\theta/\gamma))$
+must be constant while $\gamma$ varies, for each $\theta>0$. Hence
+$\gamma h'(H(\theta/\gamma))=a(\theta)/\sigma'(\gamma)$. Put $\psi=h'\circ H$ and
+$y=\theta/\gamma$: then $\psi(y)=a(y\gamma)\,b(\gamma)$ for all $y,\gamma>0$, with $b=1/(\gamma\sigma')$.
+Taking $\gamma=1$ gives $a=\psi/b(1)$, so $\psi(y\gamma)=\psi(y)\,b(1)/b(\gamma)$. With $y=1$,
+$b(1)/b(\gamma)=\psi(\gamma)/\psi(1)$, and $\phi=\psi/\psi(1)$ solves Cauchy's multiplicative
+equation $\phi(y\gamma)=\phi(y)\phi(\gamma)$. Its continuous solutions are $\phi(y)=y^r$.
+Then $h'(u)=C\,h(u)^r$. If $r=1$, $h=Ae^{Cu}$, which cannot vanish at 0. Otherwise
+$h^{1-r}$ is affine in $u$, and $h(0)=0$ forces $h=c\,u^{1/(1-r)}$. $\square$
+
+Numerically, for $u^2+u^4$ the speed ratio of the levels 1 and 4 is $0.339, 0.341, 0.366$
+at $\gamma=0.5,1,4$; for a power it is constant. The σ-straightening of §3, the
+conjugacy of §5 and the exact homogenisation map of §9 are therefore all
+specific to power laws.
+
+**Primitives.** Let $J(u)=\int_u^\infty dr/h(r)$ (finite by (A1′)) and
+$Q(u)=u+h(u)J(u)$. Define
+
+$$P(\theta,\gamma)=\gamma\,Q\big(H(\theta/\gamma)\big)\quad(\theta,\gamma>0),\qquad P(\theta,0)=0,$$
+
+extended oddly in $\theta$. With $u=H(\theta/\gamma)$, so that $\gamma h(u)=\theta$, direct
+differentiation gives
+
+$$\partial_\gamma P = u,\qquad \partial_\theta P = J(u),\qquad \partial_\theta\partial_\gamma P=\frac{1}{\gamma h'(u)} .$$
+
+The first is the stationary state, the second the Osgood primitive, and the
+third the characteristic slowness. All three are **proved**.
+
+**Front law.** A front $(\theta_L,\theta_R)$ has Rankine–Hugoniot speed
+$\dot x=[f]/[u]=[|\theta|]/[H(\theta/\gamma)]$, independent of $\eta$. Its slowness
+$S=dt/dx$ is therefore $[H(\theta/\gamma)]/[|\theta|]$, and with $d\gamma=\alpha\,dx$,
+
+$$\alpha\,[|\theta|]\,(t_1-t_0)=\Big[P(\theta_R,\gamma)-P(\theta_L,\gamma)\Big]_{\gamma_0}^{\gamma_1}.$$
+
+For levels of one sign, $S$ is the $\theta$-average of $\partial_\theta\partial_\gamma P$ over the
+jump: *a front's slowness is the mean characteristic slowness of the levels it
+spans.* A characteristic carrying $\theta$ satisfies
+$\alpha\,(t_1-t_0)=\mathrm{sgn}\,\theta\,\big(J(u_1)-J(u_0)\big)$. For $h=|u|^p$, $Q=mu$ and
+$P\propto s(\theta)\sigma$, which recovers §3: $P(\theta_R,\cdot)-P(\theta_L,\cdot)$ is linear in σ.
+The cell mass of a profile is
+$\int U[\theta]\,dx=\eta\,\mathrm{sgn}\,\theta\,\big(P(|\theta|,\gamma_2)-P(|\theta|,\gamma_1)\big)/\alpha$.
+
+**Events.** Arrival at a node, a corner or a zero is explicit. A front's
+position at a given time and the meeting time of two fronts are roots of
+monotone scalar functions:
+
+* **Lemma (speed order is independent of position).** For fronts $a=(\theta_1,\theta_2)$
+  and $b=(\theta_2,\theta_3)$, the sign of $\dot x_a-\dot x_b$ at a common $\gamma$ does not
+  depend on $\gamma$. Proof: at fixed $\gamma$ both speeds are secant slopes of the
+  convex (or, for $\eta<0$, concave) function $\eta\gamma h$ between states
+  $u_i=\eta\,\mathrm{sgn}\,\theta_i\,H(|\theta_i|/\gamma)$. The order of the $u_i$ is the order of the
+  $\theta_i$ (reversed when $\eta<0$) for every $\gamma$, and secant slopes of a convex
+  function are ordered by the order of their endpoints. $\square$
+* Hence if $a$ closes on $b$ at one point of a cell, it does so everywhere on
+  it. The time-to-reach functions $T_a(x)$, $T_b(x)$ satisfy $T_a'=S_a$ and $T_b'=S_b$, so
+  $T_a-T_b$ is strictly monotone along the common path, and the meeting point is
+  a bracketed root. The code uses Newton with the exact derivative
+  $S_a-S_b$, safeguarded by the bracket. There is still no ODE solver.
+
+**Numerics** (`trajectory.GeneralLaw`, `nonlinearity`).
+
+* Times are $(x_1-x_0)$ times a mean slowness, so no formula divides by $\alpha$.
+  When $\gamma_0,\gamma_1$ are far apart this mean comes from the closed form above.
+  Otherwise it is Gauss–Legendre on the smooth $S(\gamma)$, with the number of points
+  chosen from the Bernstein ellipse through $\gamma=0$. Fan steps use a
+  cancellation-free divided difference of $h$.
+* $J$ is evaluated in factored form, $J=(u/h)\,R$ with $R=hJ/u=Q/u-1$. For a power,
+  $R\equiv1/(p-1)$. For $\sum c_k|u|^k$, $R$ is bounded and runs from
+  $1/(k_{\min}-1)$ to $1/(k_{\max}-1)$. So $u/h$ carries both power laws of $J$ exactly:
+  divergence at $0$, decay at $\infty$. $R$ is tabulated once per $h$ as piecewise
+  Chebyshev series in $\log u$, on the window where all lower (respectively
+  upper) terms of $h$ exceed $1/20$ of the leading one. Outside it, $J$ is its exact
+  asymptotic series. At infinity this is a series in $u^{-(k_{\max}-k_i)}$. At zero it
+  is the local series plus a finite-part constant ($\pi/2$ for $u^2+u^4$), computed
+  once. Log terms appear where exponents resonate (for $u^2+|u|^3$, $1/r$ integrates
+  to $\log u$). Against 300-digit closed forms the factored $J$ is accurate to
+  $8\cdot10^{-16}$ for $u\in[10^{-30},10^{30}]$ (**observed**).
+* Cost: about 2–3 ms per event for $u^2+u^4$, against about 0.05 ms for `PowerLaw`.
+
+`tests/test_general.py` checks the following:
+
+* the generic numerics against `PowerLaw` (via $\sum c_k|u|^k$ with a single term);
+* positions against RK4 of $\dot x=[gh]/[u]$;
+* meeting times against bisection;
+* the characteristic's arrival at a zero at exactly $J(H(|\theta|))/\alpha$;
+* mass budgets through absorption, $L^1$ contraction, exact cell integrals, and the interaction invariants.
 
 ## 4. Corners are passive
 
@@ -242,12 +349,47 @@ $p\in\{3/2,3\}$ (via §9's map, which is $X$ rescaled). Convergence of the
 scheme to an entropy solution for $p\ne2$ is **not proved** here; numerical
 refinement studies are reported in §8.
 
+*General convex $h$.* The conjugacy is unavailable (§3b), but the discrete rule
+needs only the pointwise speed order of §3b's lemma.
+
+* **Riemann rule.** At a point $x$ with flux frozen at $\eta\gamma(x)h$, a decreasing jump in
+  $\theta$ is a decreasing jump in $u$ for $\eta>0$, an admissible shock for a convex
+  flux, and an increasing jump in $u$ for $\eta<0$, admissible for a concave one.
+  Fan steps have speeds ordered by the lemma at every $\gamma$, so they separate
+  for all time and across corners.
+* **At most one outgoing front.** Two adjacent fan steps never meet, so in any
+  colliding cluster every unit increase of the level is followed by a shock
+  that brings it back to at most its earlier value. By induction
+  $k_{\text{last}}\le k_{\text{first}}+1$. The Riemann solution between the exterior
+  levels is therefore at most one front. This argument is combinatorial and
+  holds for any convex $h$ (**proved** for the discrete scheme).
+
+Convergence for a general $h$ is **not proved**. For well-signed $g$ and
+uniformly convex $h$, such as $u^2+u^4$ or $u^2+|u|^3$ ($h''\ge2$), HetFT's uniform-convexity
+hypothesis holds, unlike for $|u|^p$ with $p\ne2$. That leaves only the smoothness of
+$g_\Delta$ as the gap. Measured rates are in [the general-flux report](convergence-2026-11-05.md).
+
 ## 6. Zeros of $g$: absorbing interfaces
 
 As a front approaches a zero, $\sigma\to0$ and its speed $\sigma\kappa\to0$.
 Yet $\dot\sigma$ is constant, so the zero is reached **in finite time**, and the
 front is absorbed into a stationary interface. The same holds for every
-$p>1$, with $\sigma=|g|^{1-1/p}$ and speed $|g|^{1/p}K$. The interface
+$p>1$, with $\sigma=|g|^{1-1/p}$ and speed $|g|^{1/p}K$.
+
+For a general $h$ (§3b) one condition, $\int^\infty dr/h<\infty$, controls the
+behaviour at a zero. It is equivalent to each of the following:
+
+* the profiles $H(|\theta|/\gamma)$ are integrable at the zero;
+* fronts and characteristics reach it in finite time, since $P(\theta,0)=0$ is finite;
+* the manuscript's $\dot p=-g'h(p)$ blows up in finite time.
+
+Where it fails, for example for the convex, superlinear $u\log(1+u)$, zeros
+become unreachable and the absorption and non-uniqueness mechanism is lost.
+(A1′) asks slightly more, power-type growth, so that the arrival times stay
+comparable with powers of the distance. For a polynomial, the top degree
+$k_{\max}$ governs: $U\sim|x-z|^{-1/k_{\max}}$. The bottom degree governs small
+amplitudes. The interface condition and the mass accounting below are
+unchanged. The interface
 condition, the interface flux $f(z^\pm)=\mathrm{sgn}(g_\pm)|\theta_\pm|$ and the
 limiting entropy flux $\theta$ below do not depend on $p$. The manuscript's Lax-type
 interface condition becomes a sign condition in $\theta$, valid for both
@@ -350,6 +492,14 @@ $\rho=1/(m|g|^{1/\bar p})$ and $c=\eta m^{-\bar p}$, with effective flux
 $c|v|^{\bar p}$. The substitution $u=\rho\,v\circ z$ again leaves the levels
 unchanged, since $\mathrm{sgn}(u)g|u|^{\bar p}=\mathrm{sgn}(v)c|v|^{\bar p}$.
 `PeriodicStraightening(g, power=p̄)` implements this.
+
+For a general convex $h$ there is no such map: $U[\theta]$ does not factor as
+$\rho(x)\,V(\theta)$ (§3b), and `PeriodicStraightening` rejects one. The
+homogenised flux is still explicit at the levels.
+`homogenisation.effective_flux_nodes` returns
+$\bar v_k=\eta\,\mathrm{sgn}(k)\langle H(|k|\delta/|g|)\rangle$, from closed-form cell means via $P$,
+with $\bar F_k=\eta|k|\delta$. For $|u|^p$ these nodes lie on $c|v|^p$. For a general $h$ they define a
+homogenised *comparison*, and the $O(\varepsilon)$ corrector bound below is not proved.
 
 Let $g$ have fixed sign $\eta$ and be periodic with $|g|\ge g_{\min}>0$.
 Define normalised averages and the positive stationary corrector by

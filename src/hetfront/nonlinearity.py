@@ -591,8 +591,12 @@ def parse(spec):
         if not _ and part.endswith("u"):
             coefficient, exponent = part[:-1], "1"
         coefficient = coefficient.rstrip("*")
-        c = float(coefficient) if coefficient not in ("", "+") else 1.0
-        k = float(exponent)
+        try:
+            c = float(coefficient) if coefficient not in ("", "+") else 1.0
+            k = float(exponent)
+        except ValueError:
+            raise ValueError(f"cannot read {spec!r}: expected a power p or a sum of terms c|u|^k "
+                             "(e.g. 'u^2+u^4'); use nonlinearity.Custom for other h") from None
         terms[k] = terms.get(k, 0.0) + c
     if len(terms) == 1:
         (k, c), = terms.items()
