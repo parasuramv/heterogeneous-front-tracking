@@ -7,7 +7,7 @@
   "samples": 801,
   "max_events": 5000000,
   "reference": {
-    "power": 2.0,
+    "power": null,
     "flux": "|u|^2 + |u|^3",
     "final_time": 1.0,
     "delta": 0.0015625,
@@ -18,7 +18,7 @@
   },
   "delta": [
     {
-      "power": 2.0,
+      "power": null,
       "flux": "|u|^2 + |u|^3",
       "final_time": 1.0,
       "samples": 801,
@@ -32,7 +32,7 @@
       "seconds": 2.2019704829999682
     },
     {
-      "power": 2.0,
+      "power": null,
       "flux": "|u|^2 + |u|^3",
       "final_time": 1.0,
       "samples": 801,
@@ -46,7 +46,7 @@
       "seconds": 6.059224456999914
     },
     {
-      "power": 2.0,
+      "power": null,
       "flux": "|u|^2 + |u|^3",
       "final_time": 1.0,
       "samples": 801,
@@ -60,7 +60,7 @@
       "seconds": 14.140046649000055
     },
     {
-      "power": 2.0,
+      "power": null,
       "flux": "|u|^2 + |u|^3",
       "final_time": 1.0,
       "samples": 801,
@@ -74,7 +74,7 @@
       "seconds": 29.17621378399997
     },
     {
-      "power": 2.0,
+      "power": null,
       "flux": "|u|^2 + |u|^3",
       "final_time": 1.0,
       "samples": 801,
@@ -90,7 +90,7 @@
   ],
   "mesh": [
     {
-      "power": 2.0,
+      "power": null,
       "flux": "|u|^2 + |u|^3",
       "final_time": 1.0,
       "samples": 801,
@@ -104,7 +104,7 @@
       "seconds": 133.15571745800003
     },
     {
-      "power": 2.0,
+      "power": null,
       "flux": "|u|^2 + |u|^3",
       "final_time": 1.0,
       "samples": 801,
@@ -118,7 +118,7 @@
       "seconds": 144.82363530399994
     },
     {
-      "power": 2.0,
+      "power": null,
       "flux": "|u|^2 + |u|^3",
       "final_time": 1.0,
       "samples": 801,
@@ -132,7 +132,7 @@
       "seconds": 144.0565279
     },
     {
-      "power": 2.0,
+      "power": null,
       "flux": "|u|^2 + |u|^3",
       "final_time": 1.0,
       "samples": 801,
@@ -146,7 +146,7 @@
       "seconds": 152.05200745699995
     },
     {
-      "power": 2.0,
+      "power": null,
       "flux": "|u|^2 + |u|^3",
       "final_time": 1.0,
       "samples": 801,
@@ -162,7 +162,7 @@
   ],
   "joint": [
     {
-      "power": 2.0,
+      "power": null,
       "flux": "|u|^2 + |u|^3",
       "final_time": 1.0,
       "samples": 801,
@@ -176,7 +176,7 @@
       "seconds": 0.08458800499988683
     },
     {
-      "power": 2.0,
+      "power": null,
       "flux": "|u|^2 + |u|^3",
       "final_time": 1.0,
       "samples": 801,
@@ -190,7 +190,7 @@
       "seconds": 0.44382081200001267
     },
     {
-      "power": 2.0,
+      "power": null,
       "flux": "|u|^2 + |u|^3",
       "final_time": 1.0,
       "samples": 801,
@@ -204,7 +204,7 @@
       "seconds": 1.6468979949997902
     },
     {
-      "power": 2.0,
+      "power": null,
       "flux": "|u|^2 + |u|^3",
       "final_time": 1.0,
       "samples": 801,
@@ -218,7 +218,7 @@
       "seconds": 6.113418184000011
     },
     {
-      "power": 2.0,
+      "power": null,
       "flux": "|u|^2 + |u|^3",
       "final_time": 1.0,
       "samples": 801,

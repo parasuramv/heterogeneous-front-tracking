@@ -21,6 +21,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--power", type=float, action="append", help="optional exponent filter; repeat as needed")
     parser.add_argument("--flux", action="append", help="optional general-h filter such as 'u^2+u^4'; repeat as needed")
+    parser.add_argument("--problem", choices=sorted(PROBLEMS), action="append", help="optional problem filter")
     parser.add_argument("--max-events", type=int, default=5_000_000)
     args = parser.parse_args()
     if args.max_events < 1:
@@ -32,6 +33,8 @@ def main():
     records = []
     for path in paths:
         baseline = json.loads(path.read_text())
+        if args.problem and baseline["problem"] not in args.problem:
+            continue
         general = baseline.get("power") is None
         if args.power and (general or baseline["power"] not in args.power):
             continue
