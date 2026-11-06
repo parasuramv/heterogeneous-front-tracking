@@ -1,8 +1,11 @@
 """Event-driven heterogeneous front tracking for u_t + (g_Δ(x) h(u))_x = 0.
 
-h(u) = u² by default, or |u|^p (p > 1) through ``MultiplicativeFlux(power=p)``.
+h(u) = u² by default, |u|^p (p > 1) through ``MultiplicativeFlux(power=p)``, or a
+general convex h through ``MultiplicativeFlux(h=...)``.
 
-Three kinds of event occur, all at times obtained in closed form:
+Three kinds of event occur. Their times are closed forms for powers. For a
+general h, corner and absorption times are closed-form arrival times, and
+collision times are bracketed monotone roots (``trajectory.GeneralLaw``):
 
 * **collision** of adjacent fronts in one cell: the cluster is replaced by the
   generalised Riemann solution between its two exterior levels (HetFT

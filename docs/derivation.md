@@ -27,7 +27,9 @@ on the line or on a circle $\mathbb R/L\mathbb Z$.
   at infinity: $h(r)\gtrsim r^k$ for some $k>1$. Power-type growth is slightly
   stronger than the Osgood condition $\int^\infty dr/h<\infty$, which is the
   real dividing line for the zeros (§6). A nonzero minimum of $h$ is excluded:
-  it would add the source $m\,g'(x)$. Asymmetric $h_+\ne h_-$ is not implemented.
+  it would add the source $m\,g'(x)$. An asymmetric $h$, equal to $h_+(u)$ for $u\ge0$ and
+  $h_-(-u)$ for $u<0$, is allowed when each branch satisfies these conditions
+  (`h="u^2; u^2+u^4"`, §3b).
 * **(A2) Transverse zeros.** $g$ is Lipschitz with finitely many zeros on
   compact sets, and at each zero $z$, $|g'(z\pm)| \ge \beta > 0$. Tangential
   zeros (for example $g = x^2$ or $x^3$), when detected, are rejected by
@@ -273,6 +275,24 @@ monotone scalar functions:
   a bracketed root. The code uses Newton with the exact derivative
   $S_a-S_b$, safeguarded by the bracket. There is still no ODE solver.
 
+**Asymmetric $h$.** Let $h=h_+$ on $u\ge0$ and $h(u)=h_-(-u)$ on $u<0$, each branch as in
+(A1′). The glued $h$ is convex on $\mathbb R$ with minimum $0$ at $u=0$, so the
+θ shock/fan rule and the lemma below are unchanged. The profile of level
+$\theta$ on a cell of sign $\eta$ has $\mathrm{sgn}\,u=\eta\,\mathrm{sgn}\,\theta$, so it uses the branch
+$h_{\eta\,\mathrm{sgn}\theta}$. Every formula above holds with that branch's $H$, $J$ and $Q$, level by
+level. A front's coefficient therefore carries $\eta$, which is constant along
+the front because fronts never cross zeros of $g$. Two consequences:
+
+* **Single-branch traces at zeros.** The admissible traces $\theta(z^-)\ge0\ge\theta(z^+)$
+  give $\mathrm{sgn}\,u=\eta_-$ on the left and $-\eta_+$ on the right. At a transverse
+  zero $\eta_+=-\eta_-$, so both traces have the sign of $\eta_-=-\mathrm{sgn}\,g'(z)$. Where
+  $g'(z)<0$ the selected solution beside the zero lives on $h_+$, and where
+  $g'(z)>0$ it lives on $h_-$. The blow-up rate at each zero is that branch's top
+  degree (**proved**; tested on both signs of $g'$).
+* **Reflection.** If $u$ solves the problem with $(g,h_+,h_-)$, then $v=-u$ solves it with
+  $(-g,h_-,h_+)$, and the θ levels coincide. The tests and the stress check use
+  this as an exact oracle: identical levels, fronts and event counts, with $u\mapsto-u$.
+
 **Numerics** (`trajectory.GeneralLaw`, `nonlinearity`).
 
 * Times are $(x_1-x_0)$ times a mean slowness, so no formula divides by $\alpha$.
@@ -291,6 +311,13 @@ monotone scalar functions:
   once. Log terms appear where exponents resonate (for $u^2+|u|^3$, $1/r$ integrates
   to $\log u$). Against 300-digit closed forms the factored $J$ is accurate to
   $8\cdot10^{-16}$ for $u\in[10^{-30},10^{30}]$ (**observed**).
+* Root solves stop once a Newton step is below $10^{-9}$ of the smaller of two
+  lengths: the displacement from the anchor, and the distance to the zero of
+  $g_\Delta$, where the slowness is singular. Bisection is geometric in the
+  displacement. A front just emitted from, or about to be absorbed into, a
+  zero is then located to full *relative* precision in its distance to the zero,
+  as `PowerLaw`'s closed forms are. There $|u|$ can be $10^4$–$10^6$, so this precision
+  is what keeps mass budgets at roundoff.
 * Cost: about 1 ms per event at the fine resolutions of the convergence studies,
   and 2–3 ms on coarse meshes, where cells are long and more Gauss points are
   needed. `PowerLaw` costs about 0.05–0.08 ms per event.
@@ -489,6 +516,20 @@ For a general $h$ (§3b) the same argument uses the exponent that governs $U$
 near the zero, the top degree $k_{\max}$ of a polynomial. On the line,
 [the general-flux report](convergence-2026-11-05.md) measures 1.60 for $u^2+|u|^3$,
 level by level equal to $|u|^3$, and 1.70 for $u^2+u^4$ (**observed**).
+
+*Zero alignment.* Inserting a zero as a node splits its cell at a fraction
+$f$ that, under dyadic refinement, stays fixed only when the zero is a dyadic
+number. Otherwise it wanders from level to level. The near-zero error
+constant depends on $f$, so local mesh slopes then fluctuate rather than settle.
+On the line problems $f$ is the same at every level, $(0.75,0.5,0.25)$, which is why
+their slopes are clean. On the sign-changing circle it wanders
+($0.22,0.45,0.90,0.79,0.59$). A translated pair of otherwise identical problems
+shows the effect directly: with the zeros on nodes the slopes rise monotonically to
+$1.67\approx5/3$; shifted by $0.1137$ they swing between $0.6$ and $2.0$. A
+fixed-δ floor is ruled out: the mesh errors there are δ-independent to 0.3%
+([report](convergence-2026-11-05.md#zero-alignment-and-the-circle-slopes)).
+Fitted orders on misaligned meshes summarise this fluctuation. They are not
+asymptotic rates (**observed**).
 
 ## 9. Homogenisation and the exact coordinate map
 

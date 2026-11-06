@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below, together with the papers it implements."
-title: "heterogeneous-front-tracking: front tracking for u_t + (g(x)|u|^p)_x = 0"
+title: "heterogeneous-front-tracking: front tracking for u_t + (g(x)h(u))_x = 0"
 type: software
 version: 0.1.0
 authors:
@@ -12,11 +12,13 @@ repository-code: "https://github.com/parasuramv/heterogeneous-front-tracking"
 license: MIT
 abstract: >-
   Front tracking for the heterogeneous scalar conservation law
-  u_t + (g(x)|u|^p)_x = 0, p > 1, on the line or the circle, with g
-  approximated by its piecewise-affine nodal interpolant. Fronts are
-  closed-form curves, event times solve linear equations, and transverse
-  zeros of a sign-changing g act as absorbing interfaces. Convergence as
-  the discretisation is refined is studied empirically only.
+  u_t + (g(x)h(u))_x = 0 on the line or the circle, with h = |u|^p (p > 1)
+  or a general convex h of power-type growth, possibly asymmetric, and g
+  approximated by its piecewise-affine nodal interpolant. For powers, fronts
+  are closed-form curves and event times solve linear equations. For a general
+  h, arrival times are closed forms and meeting times are monotone roots.
+  Transverse zeros of a sign-changing g act as absorbing interfaces.
+  Convergence as the discretisation is refined is studied empirically only.
 keywords:
   - conservation laws
   - front tracking

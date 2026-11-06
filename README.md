@@ -49,6 +49,10 @@ satisfies the Lax-type interface condition.
   there. No coordinate straightens the fronts unless $h$ is a power (§3b).
   The Riemann rule and "at most one outgoing front" are proved pointwise, the
   circle has no exact conjugacy, and convergence is measured, not proved.
+  An **asymmetric** $h$ takes two branches, `h="u^2; u^2+u^4"` ($h_+$ for $u>0$,
+  $h_-$ for $u<0$). A level on a cell where $g$ has sign η uses the branch of
+  $\mathrm{sgn}\,u=\eta\,\mathrm{sgn}\,\theta$. At each zero the selected traces lie on a
+  single branch: $h_+$ where $g'<0$, $h_-$ where $g'>0$.
   Each event costs about 1–3 ms (1 ms at the fine convergence resolutions),
   roughly 10–40 times the power-law cost.
 * **Zeros of $g$ are transverse**, $|g'(z)|\ge\beta>0$ at every zero.
@@ -123,6 +127,7 @@ python main.py --example xu2-blowup
 python main.py --example two-zeros --power 1.5
 python main.py --example poly-zeros                       # h = u² + u⁴
 python main.py --example two-zeros --flux "u^2+|u|^3"
+python main.py --example two-zeros --flux "u^2; u^2+u^4"   # asymmetric: h+ ; h-
 python convergence.py
 python convergence.py --power 1.5 --power 3 --max-events 5000000
 python convergence.py --flux "u^2+u^4" --problem line-sign-changing
@@ -139,8 +144,8 @@ Options: `--delta`, `--nodes`, `--cells`, `--power`, `--flux`, `--time`,
 `--interface-layer`, `--frames`, `--samples`, `--max-events`, `--output`,
 `--no-plot`. The examples are `sine`, `burgers`, `xu2-shock`, `xu2-blowup`,
 `two-zeros`, `power-sine` ($p=3$), `power-zeros` ($p=3/2$), `poly-zeros`
-($h=u^2+u^4$), `poly-sine` ($h=u^2+|u|^3$), `circle-sine`, `circle-zeros` and
-`circle-homogenisation`. `--power` or `--flux` overrides an example's
+($h=u^2+u^4$), `poly-sine` ($h=u^2+|u|^3$), `asym-zeros` ($h_+=u^2$,
+$h_-=u^2+u^4$), `circle-sine`, `circle-zeros` and `circle-homogenisation`. `--power` or `--flux` overrides an example's
 nonlinearity; the xu² examples are exact solutions only for $p=2$. For a
 general $h$, `sigma0` in the pieces CSV is $|g_\Delta|$ and `kappa` is empty
 (the coefficient is the pair of levels).
@@ -216,7 +221,12 @@ Two options handle zeros of $g$:
     - meeting times against bisection;
     - the Osgood absorption time of a characteristic;
     - mass budgets through absorption, $L^1$ contraction and exact cell integrals;
-    - the factored $J$ against closed forms.
+    - the factored $J$ against closed forms;
+    - positions within $10^{-10}$ of a zero, to full relative precision;
+  - for asymmetric $h$, the following:
+    - the branch choice on both signs of $g$, against RK4;
+    - single-branch interface traces;
+    - the exact reflection $u\mapsto-u$, $g\mapsto-g$, $h_\pm\mapsto h_\mp$.
 * Optional reference-solver tests compare the constant-coefficient case with
   `fronttrack` on the line (for $u^2$ and $|u|^p$) and `fronttrack.periodic` on the circle. They are skipped
   when those packages are unavailable; neither is a runtime dependency.
@@ -237,7 +247,8 @@ five-level experiments for $p=3/2,3$ on all four line/circle and
 well-signed/sign-changing problems, with finer spatial-reference and sampling
 checks. [The general-flux report](docs/convergence-2026-11-05.md) does the same
 for $h=u^2+u^4$ and $u^2+|u|^3$. Near zeros the top degree sets the measured
-mesh rate. The data and plots are numerical evidence, not convergence theorems.
+mesh rate. It also shows why circle slopes near zeros fluctuate: inserted zeros
+wander within their cells under dyadic refinement. The data and plots are numerical evidence, not convergence theorems.
 Initial theta data are held fixed across powers; their physical $u$ profiles
 therefore vary with $p$.
 
@@ -245,9 +256,12 @@ therefore vary with $p$.
 
 The power-law baseline passes **92 unit/regression tests** and **420 deterministic
 randomized cases** (2026-10-15); the largest randomized mass-budget residual
-was $3.62\times10^{-10}$. With general convex $h$ (2026-11-05) the suite has
-**121 tests**. Power-law runs are bit-identical to the baseline on every example,
-and the 420 cases give the same residual.
+was $3.62\times10^{-10}$. With general and asymmetric convex $h$ (2026-11-06) the
+suite has **TEST_COUNT tests**. `tools/stress_check.py` adds **300 general-h cases**
+(polynomial and asymmetric $h$, line and circle, sign-changing $g$, 60 of them a
+reflection oracle), with the largest mass residual $1.91\times10^{-10}$. Power-law
+runs are bit-identical to the baseline on every example, and the 420 cases give
+the same residual.
 
 See [the audit report](docs/audit-2026-10-09.md) for reproduced defects,
 the theory verdict, verification evidence, and remaining scope limits.

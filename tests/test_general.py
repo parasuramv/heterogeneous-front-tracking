@@ -63,6 +63,23 @@ class NonlinearityTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 AbsPolynomial(bad)
 
+    def test_custom_matches_the_polynomial(self):
+        """Custom exercises generic Newton for H, the R table from callables and quadrature tails."""
+        custom = Custom(lambda u: u ** 2 + u ** 4, lambda u: 2 * u + 4 * u ** 3, tail_exponent=4, name="u^2+u^4")
+        poly = POLYS["u2+u4"]
+        custom.validate()
+        for u in np.geomspace(1e-9, 1e9, 37):  # inside and outside the table window [1e-6, 1e6]
+            self.assertAlmostEqual(custom.osgood(u) / poly.osgood(u), 1.0, delta=5e-13, msg=u)
+            self.assertAlmostEqual(custom.inverse(poly.h(u)) / u, 1.0, delta=1e-14, msg=u)
+            self.assertAlmostEqual(custom.q_function(u) / poly.q_function(u), 1.0, delta=5e-13, msg=u)
+        g = SIGN_CHANGING()
+        one = HeteroFrontTracker.from_function(MultiplicativeFlux(g, 0.05, h=poly), _pulse, (-1.5, 1.5), cells=20)
+        two = HeteroFrontTracker.from_function(MultiplicativeFlux(g, 0.05, h=custom), _pulse, (-1.5, 1.5), cells=20)
+        one.run(1.5), two.run(1.5)
+        self.assertEqual(one.counts, two.counts)
+        np.testing.assert_allclose(two.positions(), one.positions(), rtol=0, atol=1e-10)
+        self.assertAlmostEqual(two.integral(-2.4, 2.4), one.integral(-2.4, 2.4), delta=1e-10)
+
     def test_parse(self):
         self.assertEqual(parse("u^2+u^4"), POLYS["u2+u4"])
         self.assertEqual(parse("|u|^3 + u^2"), POLYS["u2+|u|3"])
@@ -423,6 +440,16 @@ class PublicFluxTests(unittest.TestCase):
                 one.run(t), two.run(t)
                 distances.append(one.u_l1_distance(two, -2.4, 2.4))
             self.assertTrue(all(b <= a + 1e-11 for a, b in zip(distances, distances[1:])), distances)
+
+    def test_characteristic_accepts_numpy_levels(self):
+        """Regression: notebooks pass θ as numpy floats (np.linspace); direction must not subtract numpy bools."""
+        g = PiecewiseAffine.from_function(lambda x: 2 + np.sin(3 * x), np.linspace(-2, 2, 9))
+        for flux in (MultiplicativeFlux(g, 0.1), MultiplicativeFlux(g, 0.1, 3.0),
+                     MultiplicativeFlux(g, 0.1, h="u^2+u^4"), MultiplicativeFlux(g, 0.1, h="u^2; u^2+u^4")):
+            for theta in np.linspace(-0.9, 0.9, 4).tolist() + [np.float64(0.5), np.float64(-0.5), np.float64(0.0)]:
+                xs, ts = flux.characteristic(0.0, theta if isinstance(theta, np.float64) else np.float64(theta), 0.5)
+                self.assertEqual(ts[-1], 0.5)
+                self.assertEqual(np.sign(xs[-1] - xs[0]), np.sign(theta))
 
     def test_characteristic_reaches_a_zero_at_the_osgood_time(self):
         h = POLYS["u2+u4"]

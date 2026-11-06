@@ -1,4 +1,4 @@
-> **Status (phases 1–4 done):** general convex h is public (`MultiplicativeFlux(g, δ, h=...)`), with CLI flags `--flux`, examples `poly-zeros` and `poly-sine`, studies, derivation §3b, README and notebooks. [The general-flux convergence report](convergence-2026-11-05.md) records five-level studies for u²+u⁴ and u²+|u|³, with finer-reference checks. Near zeros, the top degree sets the measured mesh rate. Open: phase 5 (asymmetric h₊ ≠ h₋), the falling circle slopes for cubic-top fluxes, and any convergence proof.
+> **Status (all five phases done, 2026-11-06):** general convex h, including asymmetric h₊ ≠ h₋ (`h="u^2; u^2+u^4"`), is public through `MultiplicativeFlux(g, δ, h=...)`, the CLI, examples, studies, derivation §3b, README and notebooks. [The general-flux report](convergence-2026-11-05.md) records the convergence studies and the finer-reference checks. It also traces the circle's fluctuating near-zero slopes to zeros wandering within their cells; fixed δ is ruled out. The stress check has 300 general-h cases. Open: convergence proofs, and borderline Osgood h without power-type growth.
 
 # Plan: general convex multiplicative fluxes `g(x) h(u)`
 

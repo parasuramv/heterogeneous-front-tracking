@@ -1,18 +1,22 @@
 """Heterogeneous front tracking for u_t + (g(x) h(u))_x = 0 with piecewise-affine g.
 
-h(u) = u² by default, or |u|^p with p > 1 (``MultiplicativeFlux(..., power=p)``).
-The derivative of g is discretised (g_Δ is the nodal interpolant), so on each
-cell fronts are straight lines in σ = |g_Δ|^{(p-1)/p}; for p = 2, σ = sqrt|g_Δ|
-and w = σu solves Burgers' equation. Event times come from linear equations.
-Corners of g_Δ emit no waves; zeros of g are absorbing interfaces.
+h(u) = u² by default, |u|^p with p > 1 (``MultiplicativeFlux(..., power=p)``), or
+a general convex h such as u² + u⁴, possibly with different branches for u > 0
+and u < 0 (``MultiplicativeFlux(..., h="u^2+u^4")``, ``h="u^2; u^2+u^4"``).
+The derivative of g is discretised (g_Δ is the nodal interpolant). For powers,
+fronts on each cell are straight lines in σ = |g_Δ|^{(p-1)/p}; for p = 2,
+σ = sqrt|g_Δ| and w = σu solves Burgers' equation, and event times come from
+linear equations. For a general h no coordinate straightens the fronts.
+Arrival times are closed forms, and positions and meeting times are monotone
+roots. Corners of g_Δ emit no waves; zeros of g are absorbing interfaces.
 
 Public API (read the modules in this order):
 
 - ``PiecewiseAffine``      (heterogeneity.py)  g_Δ on the line or a circle
-- ``MultiplicativeFlux``   (flux.py)           g_Δ |u|^p with flux levels θ = kδ
+- ``MultiplicativeFlux``   (flux.py)           g_Δ h(u) with flux levels θ = kδ
 - ``trajectory``, ``PowerLaw`` (trajectory.py) closed-form front laws
 - ``GeneralLaw``, ``nonlinearity`` (trajectory.py, nonlinearity.py) general convex h
-  with the Osgood tail; per-cell laws only, not yet wired into the trackers
+  of power-type growth: ``Power``, ``AbsPolynomial``, ``Custom``, ``Asymmetric``
 - ``solve_riemann``        (riemann.py)        shock or δ-fan between levels
 - ``Front``, ``Interface`` (fronts.py)
 - ``HeteroFrontTracker``   (solver.py)         whole-line driver

@@ -1,0 +1,95 @@
+{
+  "problem": "circle-sign-changing",
+  "setting": "h-u2+u3",
+  "delta": 0.0015625,
+  "reference": {
+    "power": null,
+    "flux": "|u|^2 + |u|^3",
+    "final_time": 1.0,
+    "delta": 0.0015625,
+    "nodes": 1024,
+    "max_events": 20000000,
+    "events": 228045,
+    "seconds": 326.34461402299996
+  },
+  "mesh": [
+    {
+      "power": null,
+      "flux": "|u|^2 + |u|^3",
+      "final_time": 1.0,
+      "samples": 801,
+      "delta": 0.0015625,
+      "nodes": 16,
+      "h": 0.0625,
+      "theta_l1": 8.610311435517535e-05,
+      "primitive": 0.0004485097086353862,
+      "fronts": 93,
+      "events": 4212,
+      "seconds": 135.561331451
+    },
+    {
+      "power": null,
+      "flux": "|u|^2 + |u|^3",
+      "final_time": 1.0,
+      "samples": 801,
+      "delta": 0.0015625,
+      "nodes": 32,
+      "h": 0.03125,
+      "theta_l1": 2.0363470486386536e-05,
+      "primitive": 0.00011502614267727695,
+      "fronts": 92,
+      "events": 7739,
+      "seconds": 144.497352117
+    },
+    {
+      "power": null,
+      "flux": "|u|^2 + |u|^3",
+      "final_time": 1.0,
+      "samples": 801,
+      "delta": 0.0015625,
+      "nodes": 64,
+      "h": 0.015625,
+      "theta_l1": 5.9050161843262505e-06,
+      "primitive": 5.9676646561687696e-05,
+      "fronts": 92,
+      "events": 14937,
+      "seconds": 144.92079300799992
+    },
+    {
+      "power": null,
+      "flux": "|u|^2 + |u|^3",
+      "final_time": 1.0,
+      "samples": 801,
+      "delta": 0.0015625,
+      "nodes": 128,
+      "h": 0.0078125,
+      "theta_l1": 1.974867255991481e-06,
+      "primitive": 2.002150980906503e-05,
+      "fronts": 92,
+      "events": 29178,
+      "seconds": 151.81393168299996
+    },
+    {
+      "power": null,
+      "flux": "|u|^2 + |u|^3",
+      "final_time": 1.0,
+      "samples": 801,
+      "delta": 0.0015625,
+      "nodes": 256,
+      "h": 0.00390625,
+      "theta_l1": 7.243952746987503e-07,
+      "primitive": 7.0075464273927635e-06,
+      "fronts": 92,
+      "events": 57529,
+      "seconds": 168.27902245000018
+    }
+  ],
+  "theta_order": 1.7152444818611554,
+  "primitive_order": 1.4522511125896507,
+  "local_slopes": [
+    2.0800819642974417,
+    1.7859705377963548,
+    1.580185330345229,
+    1.4469066427959603
+  ]
+}

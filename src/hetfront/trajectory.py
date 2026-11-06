@@ -145,7 +145,7 @@ class PowerLaw:
     @staticmethod
     def direction(kappa):
         """Sign of the front's motion, constant along it: sgn K."""
-        return (kappa > 0) - (kappa < 0)
+        return int(kappa > 0) - int(kappa < 0)  # int(): numpy bools do not subtract
 
     @staticmethod
     def closing(ka, kb, gamma=None):

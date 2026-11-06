@@ -118,13 +118,56 @@ The level-by-level θ-L¹ slopes show what the finer reference changes:
   reading above: the near-zero term begins to show only at the finest levels.
 * **Circle, $u^2+|u|^3$.** The slopes fall below $5/3$ and fall further with the
   finer reference. The recorded $|u|^3$ run on this problem does the same
-  (1.49 at the finest level), so the cause is shared by both cubic-top fluxes.
-  A plausible explanation is an error floor from holding δ fixed in the
-  mesh-only runs. It has not been tested. This regime does not establish an
-  asymptotic rate.
+  (1.49 at the finest level). The cause is the position of the zeros within
+  their cells, not δ; see the next section.
 
 The heuristic $\Delta^{2-1/k_{\max}}$ is therefore consistent with the line
 measurements, but no measurement here establishes it.
+
+## Zero alignment and the circle slopes
+
+Two hypotheses for the falling circle slopes were tested on the fast $|u|^3$
+path ([data](data/convergence-2026-11-05/delta-floor/), `tools/check_delta_floor.py`).
+
+**A fixed-δ floor is ruled out.** The mesh-only runs of circle-sign-changing
+were repeated at a quarter of the flux spacing, each against a reference with
+that same δ. The errors agree with the baseline to 0.3% at every level, and so
+do the local slopes:
+
+| $h$ | δ | Mesh errors (θ-L¹) | Local slopes |
+| --- | --- | --- | --- |
+| $\lvert u\rvert^3$ | 0.0015625 | 1.03e-4, 2.57e-5, 7.71e-6, 2.49e-6, 8.88e-7 | 2.00, 1.73, 1.63, 1.49 |
+| $\lvert u\rvert^3$ | 0.000390625 | 1.03e-4, 2.57e-5, 7.73e-6, 2.50e-6, 8.90e-7 | 2.00, 1.73, 1.63, 1.49 |
+| $u^2+\lvert u\rvert^3$ | 0.0015625 | as in the study | 2.08, 1.79, 1.58, 1.45 |
+DELTA_FLOOR_U2U3
+
+**The zeros' position within their cells is the cause.** Zeros are inserted as
+nodes, splitting their cell at a fraction $f$. Under dyadic refinement $f$ stays
+fixed only for a dyadic zero:
+
+* **line problems:** $f=(0.75,0.5,0.25)$ at every level, which is why the line slopes are clean;
+* **circle-sign-changing,** with zeros at $0.5485$ and $0.9515$: $f$ wanders, $0.22\to0.45\to0.90\to0.79\to0.59$.
+
+A clean test needs one coefficient with $g''\ne0$ at its zeros, run aligned
+and translated. $g=\sin2\pi x$ has $g''=0$ at its zeros, so it is unsuitable
+(its slopes are about 2.06 for a different reason). The test therefore uses
+$g=\sin2\pi x\,(1+0.3\sin2\pi x)$, with zeros at $0$ and $\tfrac12$ and $g''=\pm0.6(2\pi)^2$ there. It
+was run once as is, with the zeros on nodes at every level, and once translated
+by $0.1137$, with the initial data translated identically. The two runs solve
+the same problem: their reference interface levels are identical, $(33,0)$ and
+$(63,-20)$.
+
+| Zeros | Fractions $f$ by level | Local slopes | Fitted |
+| --- | --- | --- | --- |
+| on nodes | 0, 0, 0, 0, 0 | 1.19, 1.41, 1.54, 1.67 | 1.46 |
+| shifted by 0.1137 | 0.82, 0.64, 0.28, 0.55, 0.11 | 1.92, 0.60, 1.97, 0.81 | 1.32 |
+
+Aligned, the slopes rise monotonically toward $5/3$, as on the line. Misaligned,
+they swing between 0.6 and 2.0. The circle anomalies of this report and of
+the 2026-10-15 report are therefore measurement artefacts of misaligned
+zeros. A fitted order on such meshes summarises the fluctuation and is not an
+asymptotic rate. Studies of near-zero rates should place the zeros on dyadic
+nodes, or refine by factors that keep $f$ fixed.
 
 ## Cost
 

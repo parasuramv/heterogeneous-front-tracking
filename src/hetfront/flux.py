@@ -230,6 +230,7 @@ class MultiplicativeFlux:
         samples = positive_count(samples, "samples")
         g = self.g
         x0 = float(g.wrap(x0))
+        theta = float(theta)
         d = (theta > 0) - (theta < 0)  # a characteristic moves with sgn θ for every h
         c = g.cell_of(x0, side="left" if d < 0 else "right")
         kappa = (law.characteristic_coef(theta, float(g.sign[c])) if self.general
