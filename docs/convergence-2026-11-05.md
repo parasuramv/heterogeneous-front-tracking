@@ -130,16 +130,21 @@ Two hypotheses for the falling circle slopes were tested on the fast $|u|^3$
 path ([data](data/convergence-2026-11-05/delta-floor/), `tools/check_delta_floor.py`).
 
 **A fixed-δ floor is ruled out.** The mesh-only runs of circle-sign-changing
-were repeated at a quarter of the flux spacing, each against a reference with
-that same δ. The errors agree with the baseline to 0.3% at every level, and so
-do the local slopes:
+were repeated at a quarter and a sixteenth of the flux spacing, each against
+a reference with that same δ. At δ/4 the errors agree with the baseline to 0.3%
+at every level. At δ/16 they are 0.3–2% lower. Neither shifts the local slopes
+by more than 0.01:
 
 | $h$ | δ | Mesh errors (θ-L¹) | Local slopes |
 | --- | --- | --- | --- |
 | $\lvert u\rvert^3$ | 0.0015625 | 1.03e-4, 2.57e-5, 7.71e-6, 2.49e-6, 8.88e-7 | 2.00, 1.73, 1.63, 1.49 |
 | $\lvert u\rvert^3$ | 0.000390625 | 1.03e-4, 2.57e-5, 7.73e-6, 2.50e-6, 8.90e-7 | 2.00, 1.73, 1.63, 1.49 |
+| $\lvert u\rvert^3$ | 0.00009765625 | 1.02e-4, 2.53e-5, 7.56e-6, 2.45e-6, 8.72e-7 | 2.01, 1.74, 1.63, 1.49 |
 | $u^2+\lvert u\rvert^3$ | 0.0015625 | as in the study | 2.08, 1.79, 1.58, 1.45 |
-DELTA_FLOOR_U2U3
+
+The $u^2+\lvert u\rvert^3$ run at δ/4 was stopped after two hours, unfinished.
+The general-h path costs about 13 times as much per event, and the $\lvert u\rvert^3$
+result already settles the question.
 
 **The zeros' position within their cells is the cause.** Zeros are inserted as
 nodes, splitting their cell at a fraction $f$. Under dyadic refinement $f$ stays
@@ -200,11 +205,17 @@ they recorded the nonlinearity under `h` and `power` as the default 2.0.
 label, `power: null`) and regenerated their CSVs. No measured value changed; this
 was checked against a copy. In every row, `h` is the mesh width.
 
+The general-h root solver was tightened after these studies were run. Its Newton
+stopping test became relative to the distance to the nearest zero, not to $|x|$.
+This fixed a $10^{-7}$ mass residual found by the stress check, in fronts within
+$10^{-6}$ of a zero. The old and new solvers were run on a study configuration
+and gave identical output, so the recorded data stands.
+
 [Saved CSV and JSON records](data/convergence-2026-11-05/) contain 120 error rows,
 eight references, six finer spatial references and 30 mesh-check rows (`checks/`). [Notebook 07](../notebooks/07_convergence.ipynb) plots the
 recorded δ-only and mesh-only errors.
 
 Validation:
-- 121 unit and regression tests pass, 5 optional `fronttrack` oracle tests are skipped, and all eight notebooks execute with saved outputs.
-- The 420-case stress check passes with an unchanged worst mass residual of $3.62\times10^{-10}$.
+- 134 unit and regression tests pass, 5 optional `fronttrack` oracle tests are skipped, and all eight notebooks execute with saved outputs. The studies were recorded at 121 tests; the rest came with asymmetric $h$.
+- The stress check passes: 420 power-law cases with an unchanged worst mass residual of $3.62\times10^{-10}$, and 300 general-h cases (60 of them asymmetric reflection checks) at $1.91\times10^{-10}$.
 - Power-law runs are bit-identical to the 2026-10-15 baseline on every example.
