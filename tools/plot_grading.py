@@ -81,9 +81,9 @@ def main(directory, output):
             bottom.semilogy(gs, [data[g][1] for g in gs], "o-", color=colour, label=f"h = {flux}")
             if (problem, flux) in uniform:
                 bottom.axhline(uniform[(problem, flux)], color=colour, ls=":", lw=1)
-        top.set(title=f"{problem}: mesh order (reference-corrected, finest 3 levels)",
+        top.set(title=f"{problem}: mesh order\n(reference-corrected, finest 3 levels)",
                 xlabel="grading exponent γ (1 = aligned)", ylabel="order", ylim=(1.0, 2.3))
-        bottom.set(title=f"{problem}: θ-L¹ mesh error at 256 cells (dotted: uniform mesh)",
+        bottom.set(title=f"{problem}: θ-L¹ mesh error at 256 cells\n(dotted: uniform mesh)",
                    xlabel="grading exponent γ (1 = aligned)", ylabel="error")
         for ax in (top, bottom):
             ax.grid(True, which="both", alpha=0.3)

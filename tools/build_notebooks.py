@@ -1103,6 +1103,43 @@ def convergence():
                     ax.legend(fontsize=7, frameon=False)
             plt.show()
         '''),
+        md(r'''
+        ## Graded meshes: the rate as a function of γ
+
+        `PiecewiseAffine.aligned(..., grading=γ)` maps each arc touching a zero
+        by $x=z+Ls^\gamma$. Summing the near-zero contributions predicts a mesh
+        order of $\min(2,\gamma(2-1/k))$. Points below are the recorded fitted
+        orders of the mesh-only θ-L¹ error. Lines are the prediction. γ = 1 is the
+        aligned mesh. See [the graded-mesh report](../docs/convergence-2026-11-07.md),
+        which also corrects the orders for the finite reference.
+        '''),
+        code('''
+        sweep = root / "convergence-2026-11-07" if root else None
+        if sweep is None or not sweep.exists():
+            print("Recorded results require the repository checkout; see the graded-mesh report.")
+        else:
+            fig, axes = plt.subplots(1, 2, figsize=(12, 4), constrained_layout=True)
+            gammas = np.linspace(1, 3.1, 200)
+            for ax, problem in zip(axes, ("line-sign-changing", "circle-sign-changing")):
+                for p, colour in ((1.5, "C2"), (2.0, "C0"), (3.0, "C3")):
+                    key = (problem, f"|u|^{p:g}")
+                    points = {1.0: aligned[key]} if key in aligned else {}
+                    for d in sorted(sweep.glob("graded-g*")):
+                        for path in d.glob(f"convergence_{problem}*.json"):
+                            r = json.loads(path.read_text())
+                            if r.get("power") == p:
+                                points[r["reference"]["grading"]] = r
+                    gs = sorted(points)
+                    orders = [fitted_order([x["h"] for x in points[g]["mesh"]][-3:],
+                                           [x["theta_l1"] for x in points[g]["mesh"]][-3:]) for g in gs]
+                    ax.plot(gs, orders, "o", color=colour, label=f"|u|^{p:g}")
+                    ax.plot(gammas, np.minimum(2, gammas * (2 - 1 / p)), "-", color=colour, alpha=.5)
+                ax.set(title=problem, xlabel="grading exponent γ", ylabel="fitted mesh order (finest 3 levels)",
+                       ylim=(1, 2.3))
+                ax.grid(True, alpha=.3)
+                ax.legend(fontsize=8)
+            plt.show()
+        '''),
     ]
     write("07_convergence.ipynb", cells)
 

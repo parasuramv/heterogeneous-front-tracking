@@ -236,7 +236,9 @@ Two options handle zeros of $g$:
     - single-branch interface traces;
     - the exact reflection $u\mapsto-u$, $g\mapsto-g$, $h_\pm\mapsto h_\mp$.
   - for zero-aligned meshes: zeros on nodes, equal cells between zeros, nested
-    dyadic refinement, and a circle solution independent of the chart origin.
+    dyadic refinement, and a circle solution independent of the chart origin;
+  - for graded meshes: the grading map (monotone, $C^1$, symmetric), unchanged arc
+    counts, a touching cell shrinking like $h^\gamma$, and nesting.
 * Optional reference-solver tests compare the constant-coefficient case with
   `fronttrack` on the line (for $u^2$ and $|u|^p$) and `fronttrack.periodic` on the circle. They are skipped
   when those packages are unavailable; neither is a runtime dependency.
@@ -266,7 +268,10 @@ wander within their cells under dyadic refinement. [The aligned-mesh
 report](docs/convergence-2026-11-06.md) repeats the sign-changing studies on
 zero-aligned meshes. Corrected for the finite reference, the line orders match
 $2-1/k_{\max}$ to within 0.04. Alignment costs accuracy, though: the uniform
-mesh's inserted node beside each zero lowers the error constant. The data and plots are numerical evidence, not convergence theorems.
+mesh's inserted node beside each zero lowers the error constant. [The
+graded-mesh report](docs/convergence-2026-11-07.md) grades the aligned cells
+towards the zeros. The order then follows $\min(2,\gamma(2-1/k_{\max}))$, and
+`--grading 2` is second order for every tested $h$. The data and plots are numerical evidence, not convergence theorems.
 Initial theta data are held fixed across powers; their physical $u$ profiles
 therefore vary with $p$.
 
@@ -275,7 +280,7 @@ therefore vary with $p$.
 The power-law baseline passes **92 unit/regression tests** and **420 deterministic
 randomized cases** (2026-10-15); the largest randomized mass-budget residual
 was $3.62\times10^{-10}$. With general and asymmetric convex $h$ (2026-11-06) the
-suite has **142 tests**. `tools/stress_check.py` adds **300 general-h cases**
+suite has **150 tests**. `tools/stress_check.py` adds **300 general-h cases**
 (polynomial and asymmetric $h$, line and circle, sign-changing $g$, 60 of them a
 reflection oracle), with the largest mass residual $1.91\times10^{-10}$. Power-law
 runs are bit-identical to the baseline on every example, and the 420 cases give

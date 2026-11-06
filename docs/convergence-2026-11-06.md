@@ -151,8 +151,9 @@ neighbourhood**: local cell length $\ell(d)\approx\Delta\,d^{\beta}$ with
 $\beta>1/(2k_{\max})$. Then $\int\ell(d)^2d^{-1-1/k_{\max}}\,dd=O(\Delta^2)$. The
 smallest cell is about $\Delta^{1/(1-\beta)}$, and the cell count stays
 $O(\Delta^{-1})$ with a larger constant. This is the standard graded-mesh remedy
-for an algebraic singularity. Here it is untested, and the dynamics could spoil
-the local estimate.
+for an algebraic singularity. [The graded-mesh report](convergence-2026-11-07.md)
+confirms it: with $x=z+Ls^\gamma$ the measured order follows
+$\min(2,\gamma(2-1/k_{\max}))$, and γ = 2 is second order in all ten cases.
 
 ## Reproduction
 

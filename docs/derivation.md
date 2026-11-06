@@ -546,8 +546,14 @@ $h^{2-1/k_{\max}}\sum_i i^{-1-1/k_{\max}}$. This is not the touching cell
 alone. Alignment fixes the constant's dependence on $f$, not the rate, and costs
 accuracy: the uniform mesh's inserted node beside each zero lowers the constant
 1.3–1.6-fold on the line. Power grading, $\ell(d)\approx\Delta d^\beta$ with
-$\beta>1/(2k_{\max})$, should restore $O(\Delta^2)$ at $O(\Delta^{-1})$ cells
-(**untested**).
+$\beta>1/(2k_{\max})$, restores $O(\Delta^2)$ at $O(\Delta^{-1})$ cells
+(`grading=γ`, $\beta=1-1/\gamma$). Summing the same contributions for any
+$\gamma$ predicts a mesh order of $\min(2,\gamma(2-1/k_{\max}))$.
+[The graded-mesh report](convergence-2026-11-07.md) measures exactly this over
+$\gamma\in\{1,1.25,1.5,2,3\}$, with γ = 2 second order for every tested $h$ on
+both problems. The most accurate γ at a fixed resolution sits just above the
+threshold $2k_{\max}/(2k_{\max}-1)$, because grading enlarges the cells away from the
+zeros (**observed**).
 
 ## 9. Homogenisation and the exact coordinate map
 

@@ -1,0 +1,6 @@
+Running circle-sign-changing, h=|u|^2 + |u|^4 (5 levels, reference depth 2)
+
+circle-sign-changing_h-u2+u4 (h=|u|^2 + |u|^4): reference δ = 0.00156, 1024 cells (graded), 212090 events, 381.5 s
+  delta  order θ-L1  0.97   primitive  0.88
+  mesh   order θ-L1  2.02   primitive  2.03
+  joint  order θ-L1  0.98   primitive  0.88
