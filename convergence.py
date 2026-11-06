@@ -28,8 +28,9 @@ from hetfront.trajectory import PowerLaw
 
 
 def flux_slug(h):
-    """Filename-safe form of a nonlinearity: 'u^2 + |u|^3' -> 'u2+u3'."""
-    return str(h).replace(" ", "").replace("|", "").replace("^", "").replace(".", "p")
+    """Filename-safe form of a nonlinearity: 'u^2 + |u|^3' -> 'u2+u3'; 'u>0: u^2; u<0: u^4' -> 'u2_u4'."""
+    text = str(h).replace(" ", "").replace("u>0:", "").replace("u<0:", "").replace(";", "_")
+    return text.replace("|", "").replace("^", "").replace(".", "p")
 
 
 def main():

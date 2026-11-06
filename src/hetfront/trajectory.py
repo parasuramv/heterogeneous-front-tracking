@@ -241,14 +241,44 @@ QUADRATIC = PowerLaw(2.0)
 # General convex h: closed-form arrival times, monotone root solves.
 # ---------------------------------------------------------------------------
 
-def _monotone_root(F, lo, hi, f_lo=None, f_hi=None, dF=None):
+def _split(lo, hi, origin):
+    """A point strictly inside (lo, hi): geometric in the displacement from ``origin`` when it spans scales.
+
+    A front's displacement from its anchor can be many orders of magnitude
+    below the initial bracket (just after emission from a zero it grows like a
+    high power of τ), so arithmetic bisection would need ~80 halvings. Here
+    a bracket end at the anchor is approached by factors of 2^20, and ends of
+    very different size are split at their geometric mean.
+    """
+    if origin is not None:
+        a, b = lo - origin, hi - origin
+        if a == 0.0 or b == 0.0:
+            other = b if a == 0.0 else a
+            x = origin + other * 2.0 ** -20
+            if min(lo, hi) < x < max(lo, hi):
+                return x
+        elif a * b > 0.0 and max(abs(a), abs(b)) > 4.0 * min(abs(a), abs(b)):
+            return origin + math.copysign(math.sqrt(a * b), a)
+    return 0.5 * (lo + hi)
+
+
+def _monotone_root(F, lo, hi, f_lo=None, f_hi=None, dF=None, reach=None, origin=None):
     """Root of a monotone F on [lo, hi] with F(lo) ≤ 0 ≤ F(hi).
 
     lo may exceed hi (a decreasing direction). With the exact derivative
     ``dF`` this is Newton safeguarded by the bracket: a step leaving it is
-    replaced by bisection. Once a step is below 1e-9 of the bracket's scale,
-    the next iterate is exact to rounding (quadratic convergence) and is
-    returned. Without ``dF``, Illinois iteration shrinks the bracket to a few ulps.
+    replaced by bisection. ``reach(x)`` is the length scale on which F is
+    smooth near x (default: the bracket's scale). Once a step is below 1e-9 of
+    it, the next iterate is exact to rounding and is returned, by quadratic
+    convergence, whose constant is about 1/reach. The front laws pass the
+    smaller of two distances. One is the displacement from the anchor, so a
+    front just leaving a zero keeps full relative accuracy, as ``PowerLaw``'s
+    closed forms do. The other is the distance to the zero of g_Δ, where the
+    slowness is singular. Bisection steps are geometric in the displacement
+    from ``origin`` (``_split``), and the bracket is shrunk to a few ulps of
+    its current ends, not of its initial scale, so a displacement of 1e-36
+    from an anchor at 0 is still resolved to full relative precision. Without
+    ``dF``, Illinois iteration shrinks the bracket to a few ulps.
     """
     f_lo = F(lo) if f_lo is None else f_lo
     f_hi = F(hi) if f_hi is None else f_hi
@@ -259,9 +289,9 @@ def _monotone_root(F, lo, hi, f_lo=None, f_hi=None, dF=None):
     if dF is not None:
         scale = max(abs(lo), abs(hi), abs(hi - lo))
         x = (lo * f_hi - hi * f_lo) / (f_hi - f_lo)
-        for _ in range(100):
+        for _ in range(200):
             if not (min(lo, hi) < x < max(lo, hi)):
-                x = 0.5 * (lo + hi)
+                x = _split(lo, hi, origin)
             fx = F(x)
             if fx == 0.0:
                 return x
@@ -272,9 +302,10 @@ def _monotone_root(F, lo, hi, f_lo=None, f_hi=None, dF=None):
             slope = dF(x)
             step = fx / slope if slope and math.isfinite(slope) else math.inf
             nxt = x - step
-            if abs(step) <= 1e-9 * scale and min(lo, hi) <= nxt <= max(lo, hi):
+            length = scale if reach is None else reach(nxt)
+            if abs(step) <= 1e-9 * length and min(lo, hi) <= nxt <= max(lo, hi):
                 return nxt
-            if abs(hi - lo) <= 4.0 * math.ulp(scale):
+            if abs(hi - lo) <= 4.0 * math.ulp(max(abs(lo), abs(hi))):
                 return 0.5 * (lo + hi)
             x = nxt
         return 0.5 * (lo + hi)
@@ -303,11 +334,16 @@ def _monotone_root(F, lo, hi, f_lo=None, f_hi=None, dF=None):
 
 
 class FrontCoef(tuple):
-    """(θ_L, θ_R, |θ_R| - |θ_L|, direction) of one front or characteristic (θ_L = θ_R)."""
+    """(θ_L, θ_R, |θ_R| - |θ_L|, direction, η) of one front or characteristic (θ_L = θ_R).
+
+    η = sgn g on the front's cell. It selects the branch of an asymmetric h
+    (sgn u = η sgn θ) and is constant along a front, since fronts never cross
+    zeros of g. The direction does not depend on η.
+    """
 
     __slots__ = ()
 
-    def __new__(cls, thL, thR):
+    def __new__(cls, thL, thR, eta=1.0):
         thL, thR = float(thL), float(thR)
         dabs = abs(thR) - abs(thL)
         if thL == thR:
@@ -315,12 +351,13 @@ class FrontCoef(tuple):
         else:
             ratio = dabs / (thR - thL)
             direction = (ratio > 0) - (ratio < 0)
-        return tuple.__new__(cls, (thL, thR, dabs, direction))
+        return tuple.__new__(cls, (thL, thR, dabs, direction, -1.0 if eta < 0 else 1.0))
 
     thL = property(lambda self: self[0])
     thR = property(lambda self: self[1])
     dabs = property(lambda self: self[2])
     direction = property(lambda self: self[3])
+    eta = property(lambda self: self[4])
 
     @property
     def characteristic(self):
@@ -349,7 +386,9 @@ class GeneralLaw:
     (x1 - x0) times a mean slowness, with no division by α: a closed form when
     γ0 and γ1 are far apart, and Gauss–Legendre on the smooth S otherwise.
 
-    The front coefficient is a ``FrontCoef`` built by ``coef(θ_L, θ_R)``.
+    The front coefficient is a ``FrontCoef`` built by ``coef(θ_L, θ_R, η)``.
+    For an asymmetric h each level uses the branch of sgn u = η sgn θ; H, J
+    and Q above are that branch's, and the formulas are otherwise unchanged.
     """
 
     quadratic = False
@@ -369,8 +408,8 @@ class GeneralLaw:
         return f"GeneralLaw({self.h!r})"
 
     @staticmethod
-    def coef(thL, thR):
-        return FrontCoef(thL, thR)
+    def coef(thL, thR, eta=1.0):
+        return FrontCoef(thL, thR, eta)
 
     @staticmethod
     def direction(coef):
@@ -381,13 +420,16 @@ class GeneralLaw:
     def sigma_of(absg):
         return np.array(absg, dtype=float) if np.ndim(absg) else float(absg)
 
-    def state(self, theta, gamma):
-        """|u| = H(|θ|/γ) on the profile of level θ where |g_Δ| = γ (inf at γ = 0)."""
+    def state(self, theta, gamma, eta=1.0):
+        """|u| = H(|θ|/γ) on the profile of level θ where |g_Δ| = γ (inf at γ = 0).
+
+        H is the inverse of the branch of sgn u = η sgn θ (one branch for an even h).
+        """
         if theta == 0.0:
             return 0.0
         if gamma <= 0.0:
             return math.inf
-        return self.h.inverse(abs(theta) / gamma)
+        return self.h.branch(eta * theta).inverse(abs(theta) / gamma)
 
     def speed(self, coef, gamma):
         """ẋ at |g_Δ| = γ (0 for a stationary front)."""
@@ -405,34 +447,34 @@ class GeneralLaw:
     # ------------------------------------------------ slowness and its primitive
     def slowness(self, coef, gamma):
         """S = dt/dx at |g_Δ| = γ > 0 (signed; ±inf for a stationary front)."""
-        thL, thR, dabs, direction = coef
+        thL, thR, dabs, direction, eta = coef
         if direction == 0:
             return math.inf
-        h = self.h
         if thL == thR:
-            return direction / (gamma * h.dh(self.state(thL, gamma)))
+            return direction / (gamma * self.h.branch(eta * thL).dh(self.state(thL, gamma, eta)))
         if thL * thR >= 0.0:
-            a, b = self.state(thL, gamma), self.state(thR, gamma)
             sign = 1.0 if thL + thR > 0 else -1.0
+            h = self.h.branch(eta * sign)  # both levels on one branch
+            a, b = self.state(thL, gamma, eta), self.state(thR, gamma, eta)
             return sign / (gamma * h.dd(a, b))
-        uR = math.copysign(self.state(thR, gamma), thR)
-        uL = math.copysign(self.state(thL, gamma), thL)
+        uR = math.copysign(self.state(thR, gamma, eta), thR)
+        uL = math.copysign(self.state(thL, gamma, eta), thL)
         return (uR - uL) / dabs
 
     def primitive(self, coef, gamma):
         """L(γ) with dL/dγ = S and L(0) = 0, so that α Δt = ΔL."""
         if gamma <= 0.0:
             return 0.0
-        thL, thR, dabs, direction = coef
-        h = self.h
+        thL, thR, dabs, direction, eta = coef
         if thL == thR:
-            return direction * h.osgood(self.state(thL, gamma)) if thL else 0.0
+            return direction * self.h.branch(eta * thL).osgood(self.state(thL, gamma, eta)) if thL else 0.0
         if thL * thR >= 0.0:
-            a, b = self.state(thL, gamma), self.state(thR, gamma)
             sign = 1.0 if thL + thR > 0 else -1.0
+            h = self.h.branch(eta * sign)
+            a, b = self.state(thL, gamma, eta), self.state(thR, gamma, eta)
             return sign * h.q_divided(a, b) / h.dd(a, b)
-        qR = math.copysign(h.q_function(self.state(thR, gamma)), thR)
-        qL = math.copysign(h.q_function(self.state(thL, gamma)), thL)
+        qR = math.copysign(self.h.branch(eta * thR).q_function(self.state(thR, gamma, eta)), thR)
+        qL = math.copysign(self.h.branch(eta * thL).q_function(self.state(thL, gamma, eta)), thL)
         return gamma * (qR - qL) / dabs if dabs else math.copysign(math.inf, qR - qL)
 
     def mean_slowness(self, coef, g0, g1):
@@ -444,23 +486,24 @@ class GeneralLaw:
             return (self.primitive(coef, g1) - self.primitive(coef, g0)) / (g1 - g0)
         return _gauss_mean(lambda gamma: self.slowness(coef, gamma), lo, hi)
 
-    def mean_state(self, theta, g0, g1):
+    def mean_state(self, theta, g0, g1, eta=1.0):
         """Mean over γ in [g0, g1] of |u| = H(|θ|/γ) on the profile of level θ.
 
         ∫ H(|θ|/γ) dγ = P(|θ|, γ) = γ Q(H(|θ|/γ)) with P(·, 0) = 0, so a cell
         integral of the profile is (x2 - x1) times this mean; there is no
-        division by α. Gauss–Legendre is used when g0 and g1 are close.
+        division by α. Gauss–Legendre is used when g0 and g1 are close. For an
+        asymmetric h, θ's sign and η select the branch.
         """
         if theta == 0.0:
             return 0.0
         if g0 == g1:
-            return self.state(theta, g0)
+            return self.state(theta, g0, eta)
         lo, hi = (g0, g1) if g0 < g1 else (g1, g0)
         if lo <= 0.0 or hi > 2.0 * lo:
-            q = self.h.q_function
-            p_lo = lo * q(self.state(theta, lo)) if lo > 0.0 else 0.0
-            return (hi * q(self.state(theta, hi)) - p_lo) / (hi - lo)
-        return _gauss_mean(lambda gamma: self.state(theta, gamma), lo, hi)
+            q = self.h.branch(eta * theta).q_function
+            p_lo = lo * q(self.state(theta, lo, eta)) if lo > 0.0 else 0.0
+            return (hi * q(self.state(theta, hi, eta)) - p_lo) / (hi - lo)
+        return _gauss_mean(lambda gamma: self.state(theta, gamma, eta), lo, hi)
 
     # -------------------------------------------------------------- front laws
     def travel_time(self, x0, s0, x1, s1, coef):
@@ -471,6 +514,14 @@ class GeneralLaw:
             return math.inf
         tau = (x1 - x0) * self.mean_slowness(coef, s0, s1)
         return tau if tau >= 0.0 else math.inf
+
+    @staticmethod
+    def _reach(origin, s0, x0, alpha):
+        """Smoothness length at x: min(|x - origin|, distance to the zero of g_Δ)."""
+        if alpha == 0.0:
+            return lambda x: abs(x - origin)
+        inv = 1.0 / abs(alpha)
+        return lambda x: min(abs(x - origin), max(s0 + alpha * (x - x0), 0.0) * inv)
 
     def _zero_location(self, x0, s0, alpha, direction):
         """Where γ reaches 0 along the direction of motion, or None."""
@@ -527,7 +578,8 @@ class GeneralLaw:
                 step *= 2.0
                 far = x0 + d * step
                 f_far = F(far)
-        return _monotone_root(F, x0, far, -tau, f_far, dF=lambda x: self.slowness(coef, gamma(x)))
+        return _monotone_root(F, x0, far, -tau, f_far, dF=lambda x: self.slowness(coef, gamma(x)),
+                              reach=self._reach(x0, s0, x0, alpha), origin=x0)
 
     def sigma(self, s0, alpha, coef, tau, x0=0.0):
         """γ after time tau from anchor γ0 (never negative within a cell)."""
@@ -566,7 +618,8 @@ class GeneralLaw:
             return Ta(xb)
         if da > 0 > db:
             x = _monotone_root(lambda y: Ta(y) - Tb(y), xa, xb, -Tb(xa), Ta(xb),
-                               dF=lambda y: self.slowness(ca, gamma(y)) - self.slowness(cb, gamma(y)))
+                               dF=lambda y: self.slowness(ca, gamma(y)) - self.slowness(cb, gamma(y)),
+                               reach=self._reach(xa, sa, xa, alpha), origin=xa)
             return 0.5 * (Ta(x) + Tb(x))
         # Common direction d: the leader is b for d > 0 and a for d < 0.
         d = da
@@ -601,11 +654,12 @@ class GeneralLaw:
                 return math.inf
         c_lead, c_lag = (cb, ca) if d > 0 else (ca, cb)
         x = _monotone_root(D, lead_x, stop, D(lead_x), d_stop,
-                           dF=lambda y: self.slowness(c_lead, gamma(y)) - self.slowness(c_lag, gamma(y)))
+                           dF=lambda y: self.slowness(c_lead, gamma(y)) - self.slowness(c_lag, gamma(y)),
+                           reach=self._reach(lead_x, sa, xa, alpha), origin=lead_x)
         return 0.5 * (Ta(x) + Tb(x))
 
-    def characteristic_coef(self, theta):
-        return FrontCoef(theta, theta)
+    def characteristic_coef(self, theta, eta=1.0):
+        return FrontCoef(theta, theta, eta)
 
     characteristic_kappa = characteristic_coef
 

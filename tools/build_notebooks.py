@@ -173,7 +173,8 @@ def playground():
 
     delta = 0.01                 # flux-level spacing: θ takes values in δZ
     power = 2.0                  # p in h(u) = |u|^p, p > 1 (2: the flux g u², as in the manuscript)
-    flux_h = None                # or a general convex h, e.g. "u^2+u^4" or "|u|^3 + 0.5u^2" (overrides power)
+    flux_h = None                # or a general convex h, e.g. "u^2+u^4" or "|u|^3 + 0.5u^2" (overrides power);
+                                 # "u^2; u^2+u^4" gives h₊ = u² for u > 0 and h₋ = u² + u⁴ for u < 0
 
     def u0(x):
         """Initial data, sampled at cell midpoints as θ = sgn(u) g_Δ(x) h(u)."""

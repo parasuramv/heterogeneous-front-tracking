@@ -93,7 +93,7 @@ class _TrackerCore:
     def _new_fronts(self, x, kL, kR, t, cell, s_hint=None):
         out = []
         for a, b in solve_riemann(kL, kR):
-            kappa = self.flux.kappa(a, b)
+            kappa = self.flux.kappa(a, b, cell)  # placement keeps the sign of g, hence η
             c, xx, ss = self._place(x, kappa, cell, s_hint)
             out.append(Front(a, b, kappa, c, t, xx, ss, float(self.g.alpha[c]), law=self.law))
         return out
@@ -267,7 +267,7 @@ class _TrackerCore:
         key = "initial_emission" if initial else "emission"
         if iface.kR > 0:
             c = iface.right_cell
-            fronts = [Front(a, b, self.flux.kappa(a, b), c, t, float(g.left[c]), 0.0, float(g.alpha[c]),
+            fronts = [Front(a, b, self.flux.kappa(a, b, c), c, t, float(g.left[c]), 0.0, float(g.alpha[c]),
                             law=self.law)
                       for a, b in solve_riemann(0, iface.kR)]
             iface.accrue(t, self.flux.delta)
@@ -277,7 +277,7 @@ class _TrackerCore:
             self.counts[key] += 1
         if iface.kL < 0:
             c = iface.left_cell
-            fronts = [Front(a, b, self.flux.kappa(a, b), c, t, float(g.right[c]), 0.0, float(g.alpha[c]),
+            fronts = [Front(a, b, self.flux.kappa(a, b, c), c, t, float(g.right[c]), 0.0, float(g.alpha[c]),
                             law=self.law)
                       for a, b in solve_riemann(iface.kL, 0)]
             iface.accrue(t, self.flux.delta)
@@ -497,7 +497,8 @@ class _TrackerCore:
             # ∫ U[θ] dx = sgn(g) sgn(θ) (x2 - x1) · mean_γ H(|θ|/γ), closed form via P(θ, γ).
             delta, law = self.flux.delta, self.law
             parts = np.array([0.0 if k == 0 else
-                              float(np.sign(k)) * float(g.sign[c]) * (b - a) * law.mean_state(abs(k) * delta, ga, gb)
+                              float(np.sign(k)) * float(g.sign[c]) * (b - a)
+                              * law.mean_state(k * delta, ga, gb, float(g.sign[c]))
                               for k, c, a, b, ga, gb in zip(levels.tolist(), cells.tolist(), x1.tolist(),
                                                             x2.tolist(), s1.tolist(), s2.tolist())])
             return xs, parts

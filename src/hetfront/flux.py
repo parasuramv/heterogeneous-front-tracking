@@ -88,15 +88,21 @@ class MultiplicativeFlux:
         magnitude = np.abs(k) * self.delta
         return np.sign(k) * (np.sqrt(magnitude) if p == 2.0 else np.power(magnitude, 1.0 / p))
 
-    def kappa(self, kL, kR):
+    def kappa(self, kL, kR, cell=None):
         """Front coefficient K, with ẋ = |g|^{1/p} K: the secant (|θ_R| - |θ_L|)/(s_R - s_L).
 
         For p = 2 this is s(θ_L) + s(θ_R). For levels of one sign it is
         ±1/D, where D is the divided difference of y^{1/p} at |θ_L|, |θ_R|,
         evaluated without cancellation (fan steps have nearby levels).
+
+        For a general h it is a ``FrontCoef``; ``cell`` gives η = sgn g there,
+        which an asymmetric h needs (the power-law path ignores it).
         """
         if self.general:
-            return self.law.coef(int(kL) * self.delta, int(kR) * self.delta)
+            if cell is None and not self.nonlinearity.symmetric:
+                raise ValueError("an asymmetric h needs the front's cell to choose its branch")
+            eta = 1.0 if cell is None else float(self.g.sign[cell])
+            return self.law.coef(int(kL) * self.delta, int(kR) * self.delta, eta)
         if self.law.quadratic:
             return self.s(kL) + self.s(kR)
         kL, kR = int(kL), int(kR)
@@ -132,11 +138,24 @@ class MultiplicativeFlux:
         levels = integer_levels(rounded.reshape(-1)).reshape(values.shape)
         return levels
 
+    def _branch_array(self, method, values, signs):
+        """Apply a branch method elementwise, choosing h₊ where signs > 0 and h₋ elsewhere."""
+        nl = self.nonlinearity
+        values = np.asarray(values, dtype=float)
+        if nl.symmetric:
+            return np.asarray(getattr(nl, method)(np.atleast_1d(values)), dtype=float).reshape(values.shape)
+        out = np.empty(values.shape)
+        positive = np.asarray(signs) > 0
+        for mask, branch in ((positive, nl.plus), (~positive, nl.minus)):
+            if np.any(mask):
+                out[mask] = getattr(branch, method)(values[mask])
+        return out
+
     def theta_of(self, x, u):
         """θ = sgn(u) g_Δ(x) h(u) at coordinates x."""
         u = np.asarray(u, dtype=float)
         if self.general:
-            return np.sign(u) * self.g(x) * self.nonlinearity.h(np.abs(np.atleast_1d(u))).reshape(u.shape)
+            return np.sign(u) * self.g(x) * np.asarray(self.nonlinearity(np.atleast_1d(u))).reshape(u.shape)
         if self.power == 2.0:
             return np.sign(u) * self.g(x) * u * u
         return np.sign(u) * self.g(x) * np.abs(u) ** self.power
@@ -156,7 +175,8 @@ class MultiplicativeFlux:
             s = np.sign(k).astype(float)
             with np.errstate(divide="ignore", invalid="ignore"):
                 y = np.abs(k) * self.delta / np.abs(gx)
-            magnitude = self.nonlinearity.inverse_array(np.where(np.isfinite(y), y, 0.0))
+            branch = np.sign(gx) * s  # sgn u on the profile
+            magnitude = self._branch_array("inverse_array", np.where(np.isfinite(y), y, 0.0), branch)
             out = np.where(s == 0, 0.0, np.sign(gx) * s * magnitude)
         else:
             s = self.s(k)
@@ -174,15 +194,16 @@ class MultiplicativeFlux:
     def characteristic_speed(self, k, x):
         """f_u = |g|^{1/p} p sgn(θ)|θ|^{1-1/p} for level(s) k at x (2 sqrt|g| s for p = 2).
 
-        For a general h, f_u = |g| h'(H(|θ|/|g|)) sgn θ.
+        For a general h, f_u = |g| h'(H(|θ|/|g|)) sgn θ, on the branch of sgn u = sgn(g) sgn θ.
         """
         if self.general:
             theta = np.asarray(self.theta(k), dtype=float)
-            absg = np.abs(self.g(x))
-            theta, absg = np.broadcast_arrays(theta, absg)
+            gx = np.asarray(self.g(x), dtype=float)
+            theta, gx = np.broadcast_arrays(theta, gx)
+            absg, branch = np.abs(gx), np.sign(gx) * np.sign(theta)
             with np.errstate(divide="ignore", invalid="ignore"):
-                u = self.nonlinearity.inverse_array(np.abs(theta) / absg)
-            out = np.sign(theta) * absg * self.nonlinearity.dh(np.atleast_1d(u)).reshape(u.shape)
+                u = self._branch_array("inverse_array", np.abs(theta) / absg, branch)
+            out = np.sign(theta) * absg * self._branch_array("dh", u, branch)
             return float(out) if out.ndim == 0 else out
         if self.power == 2.0:
             return 2.0 * np.sqrt(np.abs(self.g(x))) * self.s(k)
@@ -209,9 +230,10 @@ class MultiplicativeFlux:
         samples = positive_count(samples, "samples")
         g = self.g
         x0 = float(g.wrap(x0))
-        kappa = law.characteristic_kappa(theta)
-        d = law.direction(kappa)
+        d = (theta > 0) - (theta < 0)  # a characteristic moves with sgn θ for every h
         c = g.cell_of(x0, side="left" if d < 0 else "right")
+        kappa = (law.characteristic_coef(theta, float(g.sign[c])) if self.general
+                 else law.characteristic_kappa(theta))
         if g.periodic and d < 0 and x0 == g.origin:
             x0 = g.origin + g.period
         x, t = float(x0), 0.0

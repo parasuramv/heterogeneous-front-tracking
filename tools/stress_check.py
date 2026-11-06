@@ -1,6 +1,10 @@
 """Reproducible extended audit: 420 random cases on the line and circle.
 
 240 cases use h(u) = u²; 180 more use h(u) = |u|^p with p = 3/2 or 3.
+A separate stream adds 300 cases with general convex h: polynomials such as
+u² + u⁴ and asymmetric h with branches h₊ ≠ h₋, on sign-changing g on the
+line and the circle. 60 of those are an exact oracle: the reflection
+v = -u, -g, with the branches swapped, must give identical levels and fronts.
 
 Run from any directory with this checkout's Python environment. This is slower
 than a focused regression: it checks many coefficients and signed initial data
@@ -126,7 +130,56 @@ def main():
                                        atol=1e-10, rtol=0)
             worst = max(worst, invariants(tracker, mass, tv, count, tol))
         cases += 1
-    print(f"PASS: {cases} randomized cases; largest mass residual {worst:.3e}")
+    print(f"PASS: {cases} randomized power-law cases; largest mass residual {worst:.3e}", flush=True)
+    general_cases, general_worst = general_h_cases()
+    print(f"PASS: {general_cases} randomized general-h cases; largest mass residual {general_worst:.3e}")
+
+
+POLYNOMIALS = ("u^2+u^4", "u^2+|u|^3", "1.5|u|^1.5+u^3", "0.2u^2+|u|^2.5")
+ASYMMETRIC = ("u^2; u^2+u^4", "|u|^3; |u|^1.5", "u^2+|u|^3; 2u^2", "u^4; u^2")
+
+
+def general_h_cases():
+    """Sign-changing g with polynomial and asymmetric h; reflection oracle for the asymmetric ones."""
+    worst, cases = 0., 0
+    for seed in range(60):
+        rng = np.random.default_rng(20_000 + seed)
+        specs = (POLYNOMIALS[seed % 4], ASYMMETRIC[(seed // 4) % 4])
+        for spec in specs:
+            for periodic in (False, True):
+                nodes = np.arange(8) / 8 if periodic else np.linspace(-1, 1, 9)
+                values = rng.uniform(-2, 2, len(nodes))
+                g = PiecewiseAffine(nodes, values, period=1 if periodic else None)
+                cls = PeriodicHeteroFrontTracker if periodic else HeteroFrontTracker
+                positions = np.sort(rng.uniform(.01, .99, 8) if periodic else rng.uniform(-.9, .9, 8))
+                levels = rng.integers(-8, 9, 8 if periodic else 9)
+                if not periodic:
+                    levels[0] = levels[-1] = 0
+                tracker = cls(MultiplicativeFlux(g, .1, h=spec), positions, levels, record_history=False)
+                mass = tracker.integral() if periodic else tracker.integral(-20, 20)
+                tv, count = tracker.total_variation(), tracker.front_count()
+                for t in TIMES:
+                    tracker.run(t)
+                    worst = max(worst, invariants(tracker, mass, tv, count, 1e-9))
+                assert tracker.counts["multi_front_collision"] == 0, (seed, spec, periodic)
+                cases += 1
+                if ";" in spec and not periodic:
+                    # v = -u solves the problem with -g and swapped branches; θ levels are identical.
+                    plus, minus = (part.strip() for part in spec.split(";"))
+                    mirror = HeteroFrontTracker(
+                        MultiplicativeFlux(PiecewiseAffine(nodes, -values), .1, h=f"{minus}; {plus}"),
+                        positions, levels, record_history=False)
+                    original = HeteroFrontTracker(MultiplicativeFlux(g, .1, h=spec), positions, levels,
+                                                  record_history=False)
+                    for t in TIMES:
+                        mirror.run(t)
+                        original.run(t)
+                        assert mirror.counts == original.counts, (seed, spec, t)
+                        assert [(f.kL, f.kR) for f in mirror.items] == [(f.kL, f.kR) for f in original.items]
+                        np.testing.assert_allclose(mirror.positions(), original.positions(), atol=1e-10, rtol=0)
+                        assert abs(mirror.integral(-20, 20) + original.integral(-20, 20)) < 1e-9
+                    cases += 1
+    return cases, worst
 
 
 if __name__ == "__main__":

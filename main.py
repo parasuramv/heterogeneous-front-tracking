@@ -34,7 +34,8 @@ def parse(argv):
     p.add_argument("--nodes", type=int, help="nodes of the g mesh")
     p.add_argument("--cells", type=int, help="cells used to sample the initial data")
     p.add_argument("--power", type=float, help="p in h(u) = |u|^p, p > 1 (default: the example's)")
-    p.add_argument("--flux", help="general convex h, e.g. 'u^2+u^4' or '|u|^3 + 0.5u^2' (overrides --power)")
+    p.add_argument("--flux", help="general convex h, e.g. 'u^2+u^4', '|u|^3 + 0.5u^2', or 'h+; h-' for "
+                                  "an asymmetric h such as 'u^2; u^2+u^4' (overrides --power)")
     p.add_argument("--interface-layer", type=float, default=0.0, help="θ = 0 within this distance of zeros")
     p.add_argument("--samples", type=int, default=801, help="spatial samples of the colour field")
     p.add_argument("--frames", type=int, default=151, help="observation times")

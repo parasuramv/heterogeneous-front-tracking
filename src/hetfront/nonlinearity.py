@@ -38,6 +38,9 @@ tail exponent.
 
 ``Power(p)`` is |u|^p with exact formulas. ``AbsPolynomial`` is
 Σ c_k |u|^{k} with c_k ≥ 0 and real k > 1. ``Custom`` wraps user callables.
+``Asymmetric(plus, minus)`` is h₊(u) for u ≥ 0 and h₋(-u) for u < 0, from two
+even branches. ``GeneralLaw`` picks the branch of a level θ on a cell where g
+has sign η from sgn u = η sgn θ.
 """
 
 import math
@@ -139,6 +142,11 @@ class Nonlinearity:
 
     tail_exponent = None
     _table_window = (1e-6, 1e6)
+    symmetric = True
+
+    def branch(self, sign):
+        """The even nonlinearity used where sgn u = sign; an even h is its own branch."""
+        return self
 
     # ------------------------------------------------------------ required
     def h(self, u):
@@ -574,13 +582,104 @@ class Custom(Nonlinearity):
     __str__ = __repr__
 
 
+class Asymmetric(Nonlinearity):
+    """h(u) = h₊(u) for u ≥ 0 and h₋(-u) for u < 0, from two even branches h₊, h₋.
+
+    Each branch satisfies the hypotheses on its own: h(0) = 0, strictly
+    convex, power-type growth. The glued h is then convex on ℝ with its
+    minimum 0 at u = 0, so the θ shock/fan rule is unchanged. A level θ on a
+    cell where g has sign η lies on the branch of sgn u = η sgn θ. In
+    particular the admissible traces at a zero lie on a single branch: h₊
+    where g' < 0 at the zero, h₋ where g' > 0. Its blow-up rate there is
+    that branch's top degree.
+
+    ``str`` gives 'u>0: …; u<0: …', which ``parse`` reads back.
+    """
+
+    symmetric = False
+
+    def __init__(self, plus, minus):
+        self.plus, self.minus = parse(plus), parse(minus)
+        if not (self.plus.symmetric and self.minus.symmetric):
+            raise ValueError("each branch of an asymmetric h must be even")
+        self.tail_exponent = min(self.plus.tail_exponent, self.minus.tail_exponent)
+
+    def branch(self, sign):
+        return self.plus if sign > 0 else self.minus
+
+    def h(self, u):
+        """h at signed u (the branch is chosen by the sign of u)."""
+        if np.ndim(u):
+            u = np.asarray(u, dtype=float)
+            return np.where(u >= 0, self.plus.h(np.abs(u)), self.minus.h(np.abs(u)))
+        u = float(u)
+        return self.plus.h(u) if u >= 0 else self.minus.h(-u)
+
+    def dh(self, u):
+        """h' at signed u: h₊'(u) for u > 0, -h₋'(-u) for u < 0."""
+        if np.ndim(u):
+            u = np.asarray(u, dtype=float)
+            return np.where(u >= 0, self.plus.dh(np.abs(u)), -self.minus.dh(np.abs(u)))
+        u = float(u)
+        return self.plus.dh(u) if u >= 0 else -self.minus.dh(-u)
+
+    def __call__(self, u):
+        return self.h(u)
+
+    def _branch_only(self, *_):
+        raise TypeError("an asymmetric h has no single inverse or Osgood primitive; use branch(sign)")
+
+    inverse = inverse_array = osgood = osgood_ratio = dd = q_function = q_divided = inverse_mean = _branch_only
+
+    def validate(self):
+        self.plus.validate()
+        self.minus.validate()
+        return self
+
+    def __eq__(self, other):
+        return isinstance(other, Asymmetric) and other.plus == self.plus and other.minus == self.minus
+
+    def __hash__(self):
+        return hash(("Asymmetric", self.plus, self.minus))
+
+    def __repr__(self):
+        return f"Asymmetric({self.plus!r}, {self.minus!r})"
+
+    def __str__(self):
+        return f"u>0: {self.plus}; u<0: {self.minus}"
+
+
 def parse(spec):
-    """Parse '|u|^3 + 0.5u^2', 'u^2+u^4' or '2.5' (a power) into a Nonlinearity."""
+    """Parse a nonlinearity specification into a ``Nonlinearity``.
+
+    Accepted: a power ('2.5' or 2.5), a sum of terms c|u|^k ('|u|^3 + 0.5u^2',
+    'u^2+u^4'), or two branches separated by ';' for an asymmetric h. In the
+    last case the plus branch comes first, or each is marked
+    ('u>0: u^2; u<0: 3u^4'). Equal branches give the even h.
+    """
     if isinstance(spec, Nonlinearity):
         return spec
     if isinstance(spec, (int, float)) and not isinstance(spec, bool):
         return Power(spec)
-    text = str(spec).replace(" ", "").replace("|u|", "u").replace("**", "^").replace("-", "+-")
+    text = str(spec)
+    if ";" in text:
+        parts = [part.strip() for part in text.split(";")]
+        if len(parts) != 2 or not all(parts):
+            raise ValueError(f"cannot read {spec!r}: an asymmetric h needs exactly two branches 'h+; h-'")
+        branches = {}
+        for i, part in enumerate(parts):
+            key = "plus" if i == 0 else "minus"
+            compact = part.replace(" ", "")
+            for marker, name in (("u>0:", "plus"), ("u<0:", "minus")):
+                if compact.startswith(marker):
+                    key, part = name, compact[len(marker):]
+            if key in branches:
+                raise ValueError(f"cannot read {spec!r}: branch {key} given twice")
+            branches[key] = parse(part)
+        if branches["plus"] == branches["minus"]:
+            return branches["plus"]
+        return Asymmetric(branches["plus"], branches["minus"])
+    text = text.replace(" ", "").replace("|u|", "u").replace("**", "^").replace("-", "+-")
     try:
         return Power(float(text))
     except ValueError:

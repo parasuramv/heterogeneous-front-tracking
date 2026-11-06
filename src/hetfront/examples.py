@@ -124,6 +124,12 @@ EXAMPLES = {
         "|u|³): the sine pulse with a flux that steepens at large amplitude.",
         lambda x: 2 + np.sin(3 * x), (-6, 6), (-3, 4), 3.0, _pulse, h="u^2+|u|^3",
         defaults={"delta": 0.02, "nodes": 41, "cells": 60}),
+    "asym-zeros": Example(
+        "asym-zeros", "g = x(1 - x²) with an asymmetric flux, h = u² for u > 0 and u² + u⁴ for u < 0. "
+        "The admissible traces at each zero lie on one branch, h₊ where g' < 0 and h₋ where g' > 0.",
+        lambda x: x * (1 - x * x), (-2, 2), (-2.5, 2.5), 2.0,
+        lambda x: np.where(np.abs(x) < 1.8, 1.2 * np.sin(2 * x) + 0.4 * np.cos(5 * x), 0.0), h="u^2; u^2+u^4",
+        defaults={"delta": 0.02, "nodes": 41, "cells": 60}),
     "circle-sine": Example(
         "circle-sine", "Well-signed g = 2 + sin x on the circle of length 2π; fronts circulate "
         "and total mass is conserved exactly.",

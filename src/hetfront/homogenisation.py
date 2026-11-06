@@ -121,7 +121,8 @@ def effective_flux_nodes(g, delta, levels, h):
     """Nodes (v̄_k, F̄_k) of the homogenised polygonal flux for a general h.
 
     For well-signed periodic g with sign η, the stationary profile of level
-    k has period mean v̄_k = η sgn(k) ⟨H(|k|δ/|g|)⟩ and flux F̄_k = η|k|δ.
+    k has period mean v̄_k = η sgn(k) ⟨H(|k|δ/|g|)⟩ and flux F̄_k = η|k|δ,
+    with H the inverse of the branch of sgn u = η sgn k for an asymmetric h.
     Each cell mean is (x2 - x1) · ``GeneralLaw.mean_state``, from the closed
     form P(θ, γ) = γ Q(H(θ/γ)), so no quadrature is involved. For
     h = |u|^p this is ``PeriodicStraightening``'s effective flux c|v|^p at
@@ -142,7 +143,7 @@ def effective_flux_nodes(g, delta, levels, h):
         if k == 0:
             means.append(0.0)
             continue
-        theta = abs(k) * delta
-        total = math.fsum(w * law.mean_state(theta, a, b) for w, a, b in zip(lengths, left, right))
+        theta = k * delta
+        total = math.fsum(w * law.mean_state(theta, a, b, eta) for w, a, b in zip(lengths, left, right))
         means.append(eta * math.copysign(1.0, k) * total / g.period)
     return np.asarray(means), eta * np.abs(levels) * delta

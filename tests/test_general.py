@@ -140,6 +140,39 @@ class GeneralLawTests(unittest.TestCase):
             self.assertEqual(G.position(1.0, 1.0, 1.0, c, total * 1.5), 0.0)
             self.assertAlmostEqual(G.position(1.0, 1.0, 1.0, c, near[1]), 1e-4, delta=1e-15)
 
+    def test_positions_near_a_zero_keep_relative_accuracy(self):
+        """Regression: Newton's stopping rule must respect both the displacement and the distance to the zero.
+
+        A front just emitted from a zero, or about to be absorbed, sits ~1e-10
+        from it, where |u| ~ 1e4–1e6. The generic numerics must then match
+        PowerLaw's closed form relative to that distance, not to |x|.
+        """
+        from hetfront.trajectory import divided_power
+        for p in (1.5, 2.0, 3.0):
+            P, G = PowerLaw(p), GeneralLaw(AbsPolynomial({p: 1.0}))
+            alpha, z = 2.0, 0.0                       # γ = 2 (x - z): a zero at x = z = 0, so tiny distances are representable
+            for thL, thR in ((0.0, 0.8), (-0.8, 0.0)):  # fronts leaving the zero to the right / arriving from the left
+                sign = 1.0 if thL + thR > 0 else -1.0
+                K = sign / divided_power(abs(thL), abs(thR), 1 / p)
+                c = G.coef(thL, thR)
+                if c.direction > 0:   # emitted at the zero: anchor at γ = 0
+                    for tau in (1e-12, 1e-9, 1e-6):
+                        xp = P.position(z, 0.0, alpha, K, tau)
+                        xg = G.position(z, 0.0, alpha, c, tau)
+                        self.assertAlmostEqual((xg - z) / (xp - z), 1.0, delta=1e-12, msg=(p, tau))
+                else:                 # arriving: start at x0 > z, stop just short of absorption
+                    x0 = z + 0.25
+                    s0 = P.sigma_of(alpha * (x0 - z))
+                    total = G.travel_time(x0, alpha * (x0 - z), z, 0.0, c)
+                    for gap in (1e-3, 1e-7, 1e-10):
+                        tau = total * (1 - gap)
+                        # Exact distance to the zero, free of the cancellation in x0 + displacement:
+                        # |g| = α (x - z) = σ^m with σ(τ) = σ0 + q α K τ.
+                        d = max(s0 + P.q * alpha * K * tau, 0.0) ** P.m / alpha
+                        xg = G.position(x0, alpha * (x0 - z), alpha, c, tau)
+                        # Rounding of x itself limits the comparison to a few ulps of x0 relative to d.
+                        self.assertAlmostEqual((xg - z) / d, 1.0, delta=1e-12 + 8 * math.ulp(x0) / d, msg=(p, gap))
+
     def test_fan_steps_keep_full_precision(self):
         P, G = PowerLaw(3.0), GeneralLaw(AbsPolynomial({3.0: 1.0}))
         k, delta = 10_000, 1e-3
@@ -224,7 +257,7 @@ class _GeneralLawFlux(MultiplicativeFlux):
         self.law = GeneralLaw(nonlinearity)
         self.sigma_left, self.sigma_right = g.absg_left, g.absg_right
 
-    def kappa(self, kL, kR):
+    def kappa(self, kL, kR, cell=None):
         return self.law.coef(kL * self.delta, kR * self.delta)
 
     def sigma(self, c, x):
@@ -491,6 +524,192 @@ class EntryPointTests(unittest.TestCase):
                                   "u log u", "--no-plot", "--output", output], cwd=ROOT, capture_output=True, text=True)
             self.assertNotEqual(bad.returncode, 0)
             self.assertIn("--flux", bad.stderr)
+
+
+
+# ---------------------------------------------------------------------------
+# Asymmetric h (phase 5): h₊ for u ≥ 0, h₋ for u < 0.
+# ---------------------------------------------------------------------------
+from hetfront.nonlinearity import Asymmetric  # noqa: E402
+
+ASYM = {"u2|u2+u4": "u^2; u^2+u^4", "u2+u4|u2": "u^2+u^4; u^2", "u3|u1.5": "|u|^3; |u|^1.5"}
+
+
+def _asym_rk4_speed(h, thL, thR, eta, gamma):
+    """Physical [g h(u)]/[u] for an asymmetric h, g = η γ, states from the branch of sgn u = η sgn θ."""
+    def state(theta):
+        if theta == 0:
+            return 0.0
+        b = h.branch(eta * theta)
+        return eta * math.copysign(b.inverse(abs(theta) / gamma), theta)
+    uL, uR = state(thL), state(thR)
+    return eta * gamma * (h.h(uR) - h.h(uL)) / (uR - uL)
+
+
+class AsymmetricTests(unittest.TestCase):
+    def test_parse_and_construction(self):
+        h = parse("u^2; u^2+u^4")
+        self.assertIsInstance(h, Asymmetric)
+        self.assertEqual(h.plus, Power(2))
+        self.assertEqual(h.minus, POLYS["u2+u4"])
+        self.assertEqual(parse(str(h)), h)
+        self.assertEqual(parse("u<0: u^2+u^4; u>0: u^2"), h)
+        self.assertEqual(parse("u^2+u^4; u^2+u^4"), POLYS["u2+u4"])  # equal branches: even h
+        for bad in ("u^2; u^3; u^4", "u>0: u^2; u>0: u^3", "u^2;"):
+            with self.assertRaises(ValueError):
+                parse(bad)
+        with self.assertRaises(ValueError):
+            Asymmetric(h, Power(2))  # branches must be even
+        with self.assertRaises(TypeError):
+            h.inverse(1.0)  # no single inverse: use a branch
+        np.testing.assert_allclose(h(np.array([-2.0, -0.5, 0.0, 0.5, 2.0])), [20.0, 0.3125, 0.0, 0.25, 4.0])
+        np.testing.assert_allclose(h.dh(np.array([-1.0, 1.0])), [-6.0, 2.0])
+        with self.assertRaises(ValueError):
+            Asymmetric(Power(2), "u^2+1").validate()
+
+    def test_kappa_needs_the_cell(self):
+        flux = MultiplicativeFlux(SIGN_CHANGING(), 0.1, h="u^2; u^2+u^4")
+        with self.assertRaises(ValueError):
+            flux.kappa(1, 2)
+        c_pos, c_neg = flux.g.cell_of(-2.0), flux.g.cell_of(-0.5)  # g > 0 left of -1, g < 0 on (-1, 0)
+        self.assertEqual(flux.kappa(1, 2, c_pos).eta, 1.0)
+        self.assertEqual(flux.kappa(1, 2, c_neg).eta, -1.0)
+
+    def test_level_maps_choose_the_branch(self):
+        flux = MultiplicativeFlux(SIGN_CHANGING(), 0.01, h="u^2; u^2+u^4")
+        h = flux.nonlinearity
+        x = np.array([-2.2, -2.2, -0.6, -0.6, 0.4, 0.4, 1.7, 1.7])  # each sign of g, each sign of θ
+        k = np.array([40, -40, 40, -40, 17, -17, 250, -250])
+        u = flux.u(k, x)
+        gx = flux.g(x)
+        np.testing.assert_array_equal(np.sign(u), np.sign(gx) * np.sign(k))
+        for ui, ki, gi in zip(u, k, gx):
+            branch = h.plus if ui > 0 else h.minus
+            self.assertAlmostEqual(branch.h(abs(ui)) * abs(gi), abs(ki) * flux.delta, places=13)
+        np.testing.assert_allclose(flux.theta_of(x, u), k * flux.delta, rtol=1e-14)
+        np.testing.assert_allclose(flux.characteristic_speed(k, x), gx * h.dh(u), rtol=1e-13)
+
+    def test_positions_match_rk4_on_both_signs_of_g(self):
+        for spec in ASYM.values():
+            G = GeneralLaw(spec)
+            for eta in (1.0, -1.0):
+                for thL, thR in FRONTS + [(1.0, 1.0), (-2.0, -2.0)]:
+                    c = G.coef(thL, thR, eta)
+                    for alpha, b in ((0.7, 1.1), (0.0, 1.3), (-0.2, 2.0)):
+                        def speed(x):
+                            gamma = alpha * x + b
+                            if thL == thR:
+                                br = G.h.branch(eta * thL)
+                                return math.copysign(gamma * br.dh(br.inverse(abs(thL) / gamma)), thL)
+                            return _asym_rk4_speed(G.h, thL, thR, eta, gamma)
+                        x0, g0 = 0.3, alpha * 0.3 + b
+                        zero = G._zero_location(x0, g0, alpha, c.direction)
+                        T = 0.6 if zero is None else min(0.6, 0.5 * G.travel_time(x0, g0, zero, 0.0, c))
+                        got = G.position(x0, g0, alpha, c, T)
+                        self.assertAlmostEqual(got, rk4(speed, x0, T), delta=1e-11, msg=(spec, eta, thL, thR, alpha))
+
+    def test_equal_branches_reproduce_the_even_tracker(self):
+        even = POLYS["u2+u4"]
+        glued = Asymmetric(AbsPolynomial({2: 1.0, 4: 1.0}), AbsPolynomial({2: 1.0, 4: 1.0}))  # bypasses parse
+        g = SIGN_CHANGING()
+        one = HeteroFrontTracker.from_function(MultiplicativeFlux(g, 0.05, h=even), _pulse, (-1.5, 1.5), cells=24)
+        two = HeteroFrontTracker.from_function(MultiplicativeFlux(g, 0.05, h=glued), _pulse, (-1.5, 1.5), cells=24)
+        one.run(1.5), two.run(1.5)
+        self.assertEqual(one.counts, two.counts)
+        np.testing.assert_allclose(two.positions(), one.positions(), rtol=0, atol=1e-13)
+        self.assertAlmostEqual(two.integral(-2.4, 2.4), one.integral(-2.4, 2.4), delta=1e-13)
+
+    def test_reflection_symmetry(self):
+        """v = -u solves the problem with -g and swapped branches; the θ levels are identical."""
+        nodes = np.linspace(-2.5, 2.5, 21)
+        g = PiecewiseAffine.from_function(lambda x: x * (1 - x ** 2), nodes)
+        minus_g = PiecewiseAffine.from_function(lambda x: -x * (1 - x ** 2), nodes)
+        positions, levels = _theta_data(seed=11)
+        for plus, minus in (("u^2", "u^2+u^4"), ("|u|^3", "|u|^1.5")):
+            a = HeteroFrontTracker(MultiplicativeFlux(g, 0.05, h=f"{plus}; {minus}"), positions, levels)
+            b = HeteroFrontTracker(MultiplicativeFlux(minus_g, 0.05, h=f"{minus}; {plus}"), positions, levels)
+            xs = np.linspace(-2.3, 2.3, 47) + 1e-3
+            for t in (0.3, 1.0, 2.5):
+                a.run(t), b.run(t)
+                self.assertEqual(a.counts, b.counts)
+                np.testing.assert_allclose(b.positions(), a.positions(), rtol=0, atol=1e-11)
+                np.testing.assert_array_equal(b.sample_levels(xs), a.sample_levels(xs))
+                np.testing.assert_allclose(b.sample_u(xs), -a.sample_u(xs), rtol=1e-12, atol=0)
+                self.assertAlmostEqual(b.integral(-2.4, 2.4), -a.integral(-2.4, 2.4), delta=1e-12)
+                self.assertAlmostEqual(b.mass_absorbed(), -a.mass_absorbed(), delta=1e-12)
+            self.assertGreater(a.counts["absorption"], 0)
+
+    def test_mass_budget_and_single_branch_traces(self):
+        g = SIGN_CHANGING()
+        for spec in ASYM.values():
+            flux = MultiplicativeFlux(g, 0.05, h=spec)
+            tr = HeteroFrontTracker.from_function(flux, _pulse, (-1.5, 1.5), cells=30)
+            a, b = -2.3, 2.3
+            mass0 = tr.integral(a, b)
+            times = [0.2, 0.7, 1.5, 3.0]
+            for t in times:
+                tr.run(t)
+                for iface in tr.interfaces:
+                    # g' < 0 at the zero (g > 0 on its left): traces on h₊ (u ≥ 0); g' > 0: on h₋ (u ≤ 0).
+                    side = 1.0 if iface.left_sign > 0 else -1.0
+                    z = iface.x
+                    traces = flux.u(np.array([iface.kL, iface.kR]), np.array([z - 1e-6, z + 1e-6]))
+                    self.assertTrue(np.all(side * traces >= 0.0), (spec, z, traces))
+            inflow = tr.flux_through(a, [0.0] + times) - tr.flux_through(b, [0.0] + times)
+            residual = tr.integral(a, b) + tr.mass_absorbed() - inflow[-1] - mass0
+            self.assertLess(abs(residual), 1e-11, spec)
+            self.assertGreater(tr.counts["absorption"], 0)
+            self.assertEqual(tr.counts["emission"], 0)
+            self.assertEqual(tr.counts["multi_front_collision"], 0)
+            self.assertTrue(tr.interface_admissible())
+
+    def test_l1_contraction_and_invariants(self):
+        g = SIGN_CHANGING()
+        for spec in ASYM.values():
+            flux = MultiplicativeFlux(g, 0.05, h=spec)
+            one = HeteroFrontTracker.from_function(flux, _pulse, (-1.5, 1.5), cells=30)
+            two = HeteroFrontTracker.from_function(flux, lambda x: 0.8 * _pulse(x - 0.2), (-1.5, 1.5), cells=30)
+            tv, count = one.total_variation(), one.front_count()
+            distances = []
+            for t in (0.0, 0.3, 0.9, 2.0):
+                one.run(t), two.run(t)
+                one.check_levels()
+                self.assertTrue(np.all(np.diff(one.positions()) >= -1e-11))
+                self.assertLessEqual(one.total_variation(), tv + 1e-12)
+                self.assertLessEqual(one.front_count(), count)
+                distances.append(one.u_l1_distance(two, -2.4, 2.4))
+            self.assertTrue(all(b <= a + 1e-11 for a, b in zip(distances, distances[1:])), (spec, distances))
+
+    def test_circle_and_effective_flux(self):
+        g = PiecewiseAffine.from_function(lambda x: 2 + np.sin(2 * np.pi * x), np.arange(16) / 16, period=1.0)
+        tr = PeriodicHeteroFrontTracker(MultiplicativeFlux(g, 0.1, h="u^2; u^2+u^4"), [0.1, 0.35, 0.6, 0.8], [3, -2, 5, 0])
+        mass, tv = tr.integral(), tr.total_variation()
+        tr.run(2.0)
+        tr.check_levels()
+        self.assertAlmostEqual(tr.integral(), mass, delta=1e-12)  # well-signed circle: exact conservation
+        self.assertLessEqual(tr.total_variation(), tv + 1e-12)
+        levels = np.arange(-6, 7)
+        v, F = effective_flux_nodes(g, 0.1, levels, "u^2; u^2+u^4")
+        v_plus, _ = effective_flux_nodes(g, 0.1, levels, "u^2")
+        v_minus, _ = effective_flux_nodes(g, 0.1, levels, "u^2+u^4")
+        np.testing.assert_allclose(v[levels > 0], v_plus[levels > 0], rtol=1e-14)  # η = +1: θ > 0 on h₊
+        np.testing.assert_allclose(v[levels < 0], v_minus[levels < 0], rtol=1e-14)
+        slopes = np.diff(F) / np.diff(v)
+        self.assertTrue(np.all(np.diff(slopes) > 0))  # still convex, no longer even
+
+    def test_cli_with_asymmetric_flux(self):
+        with tempfile.TemporaryDirectory() as output:
+            done = subprocess.run([sys.executable, str(ROOT / "main.py"), "--example", "two-zeros", "--flux",
+                                   "u^2; u^2+u^4", "--delta", "0.1", "--cells", "12", "--frames", "3",
+                                   "--samples", "101", "--no-plot", "--output", output],
+                                  cwd=ROOT, check=True, capture_output=True, text=True)
+            self.assertIn("h(u) = u>0: |u|^2; u<0: |u|^2 + |u|^4", done.stdout)
+            self.assertLess(abs(float(done.stdout.rsplit(":", 1)[1])), 1e-12)
+            subprocess.run([sys.executable, str(ROOT / "convergence.py"), "--problem", "line-sign-changing",
+                            "--flux", "u^2; u^2+u^4", "--levels", "2", "--depth", "1", "--samples", "41",
+                            "--no-plot", "--output", output], cwd=ROOT, check=True, capture_output=True, text=True)
+            record = json.loads((Path(output) / "convergence_line-sign-changing_h-u2_u2+u4.json").read_text())
+            self.assertEqual(parse(record["flux"]), parse("u^2; u^2+u^4"))
 
 
 if __name__ == "__main__":
