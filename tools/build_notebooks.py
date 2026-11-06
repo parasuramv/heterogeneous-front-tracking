@@ -1056,6 +1056,51 @@ def convergence():
                     ax.legend(fontsize=8)
             plt.show()
         '''),
+        md(r'''
+        ## Uniform against zero-aligned meshes
+
+        A uniform mesh with the zeros inserted as nodes splits each zero's cell
+        at a fraction that changes from level to level. The near-zero error
+        constant depends on that fraction, so the slopes fluctuate. Aligned
+        meshes (`PiecewiseAffine.aligned`, now the default) keep each zero on a
+        node with equal cells around it at every level. Recorded in
+        [the aligned-mesh report](../docs/convergence-2026-11-06.md); the legend
+        lists local slopes, coarse to fine.
+        '''),
+        code('''
+        import math
+        root = local_src.parent / "docs/data" if local_src else None
+
+        def mesh_records(*dirs):
+            out = {}
+            for d in dirs:
+                for path in sorted((root / d).glob("convergence_*sign-changing*.json")):
+                    r = json.loads(path.read_text())
+                    out[(r["problem"], r.get("flux") or f"|u|^{r['power']:g}")] = r
+            return out
+
+        if root is None or not (root / "convergence-2026-11-06").exists():
+            print("Recorded results require the repository checkout; see the aligned-mesh report.")
+        else:
+            aligned = mesh_records("convergence-2026-11-06")
+            uniform = mesh_records("convergence-2026-10-15", "convergence-2026-11-05", "convergence-2026-11-06/uniform")
+            fluxes = sorted({f for _, f in aligned}, key=lambda f: ("+" in f, f))
+            fig, axes = plt.subplots(2, len(fluxes), figsize=(3.6 * len(fluxes), 7), constrained_layout=True)
+            for row, problem in zip(axes, ("line-sign-changing", "circle-sign-changing")):
+                for ax, flux in zip(row, fluxes):
+                    for source, style, colour in ((uniform, "s--", "0.55"), (aligned, "o-", "C0")):
+                        r = source.get((problem, flux))
+                        if r is None:
+                            continue
+                        h, e = [x["h"] for x in r["mesh"]], [x["theta_l1"] for x in r["mesh"]]
+                        local = [math.log(e[i] / e[i + 1]) / math.log(h[i] / h[i + 1]) for i in range(len(e) - 1)]
+                        ax.loglog(h, e, style, color=colour, ms=4,
+                                  label=r["reference"].get("mesh", "uniform") + ": " + ", ".join(f"{v:.2f}" for v in local))
+                    ax.set_title(f"{problem}\\nh = {flux}", fontsize=9)
+                    ax.grid(True, which="both", alpha=.3)
+                    ax.legend(fontsize=7, frameon=False)
+            plt.show()
+        '''),
     ]
     write("07_convergence.ipynb", cells)
 

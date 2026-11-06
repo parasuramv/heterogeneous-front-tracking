@@ -1,0 +1,12 @@
+Running line-sign-changing, p=2 (5 levels, reference depth 2)
+
+line-sign-changing (p=2): reference δ = 0.00156, 1023 cells (uniform), 163185 events, 4.5 s
+  delta  order θ-L1  1.00   primitive  1.00
+  mesh   order θ-L1  1.46   primitive  1.44
+  joint  order θ-L1  1.03   primitive  1.24
+Running circle-sign-changing, p=2 (5 levels, reference depth 2)
+
+circle-sign-changing (p=2): reference δ = 0.00156, 1024 cells (uniform), 218114 events, 3.8 s
+  delta  order θ-L1  0.96   primitive  0.91
+  mesh   order θ-L1  1.37   primitive  1.36
+  joint  order θ-L1  0.96   primitive  0.92
