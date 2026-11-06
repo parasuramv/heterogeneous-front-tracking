@@ -1,5 +1,9 @@
 # General-power convergence — 2026-10-15
 
+> These studies used uniform $g$ meshes with the zeros inserted as nodes.
+> Meshes are now zero-aligned by default; reproduce them with `--mesh uniform`.
+> The aligned results are in [the aligned-mesh report](convergence-2026-11-06.md).
+
 Five-level refinement studies now cover $p=3/2,3$ on the line and circle,
 with well-signed and sign-changing coefficients. These measurements compare
 front approximations against numerical references; they do not establish

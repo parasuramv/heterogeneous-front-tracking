@@ -1,0 +1,18 @@
+Running circle-sign-changing, p=2 (7 levels, reference depth 2)
+
+circle-sign-changing (p=2): reference δ = 0.000391, 4096 cells (aligned), 3518390 events, 102.1 s
+  delta  order θ-L1  0.98   primitive  1.00
+  mesh   order θ-L1  1.29   primitive  1.33
+  joint  order θ-L1  0.98   primitive  1.00
+Running circle-sign-changing, p=1.5 (7 levels, reference depth 2)
+
+circle-sign-changing_p1p5 (p=1.5): reference δ = 0.000391, 4096 cells (aligned), 3342334 events, 135.0 s
+  delta  order θ-L1  0.94   primitive  1.00
+  mesh   order θ-L1  1.17   primitive  1.30
+  joint  order θ-L1  0.94   primitive  1.06
+Running circle-sign-changing, p=3 (7 levels, reference depth 2)
+
+circle-sign-changing_p3p0 (p=3): reference δ = 0.000391, 4096 cells (aligned), 3519073 events, 144.7 s
+  delta  order θ-L1  1.04   primitive  1.00
+  mesh   order θ-L1  1.49   primitive  1.78
+  joint  order θ-L1  1.04   primitive  1.00

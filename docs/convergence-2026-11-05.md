@@ -1,5 +1,9 @@
 # General-flux convergence — 2026-11-05
 
+> These studies used uniform $g$ meshes with the zeros inserted as nodes.
+> Meshes are now zero-aligned by default; reproduce them with `--mesh uniform`.
+> The aligned results are in [the aligned-mesh report](convergence-2026-11-06.md).
+
 Five-level refinement studies for two general convex nonlinearities,
 $h=u^2+u^4$ and $h=u^2+|u|^3$, on the same four problems as the power-law
 studies. These measurements compare front approximations with numerical

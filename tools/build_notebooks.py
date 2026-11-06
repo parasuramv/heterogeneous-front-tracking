@@ -1097,6 +1097,7 @@ def convergence():
                         ax.loglog(h, e, style, color=colour, ms=4,
                                   label=r["reference"].get("mesh", "uniform") + ": " + ", ".join(f"{v:.2f}" for v in local))
                     ax.set_title(f"{problem}\\nh = {flux}", fontsize=9)
+                    ax.xaxis.set_minor_formatter(NullFormatter())
                     ax.grid(True, which="both", alpha=.3)
                     ax.legend(fontsize=7, frameon=False)
             plt.show()

@@ -531,6 +531,24 @@ fixed-δ floor is ruled out: the mesh errors there are δ-independent to 0.3%
 Fitted orders on misaligned meshes summarise this fluctuation. They are not
 asymptotic rates (**observed**).
 
+Meshes are therefore zero-aligned by default (`PiecewiseAffine.aligned`): every
+zero is a node, and the cells between zeros are equal and bisected at each
+level. [The aligned-mesh report](convergence-2026-11-06.md) fits
+$C(h^r-h_{\rm ref}^r)$, which accounts for the reference being only four times
+finer. With that correction the line orders are $2-1/k_{\max}$ to within 0.04
+for $|u|^{3/2}$, $u^2$, $|u|^3$, $u^2+|u|^3$ and $u^2+u^4$, with log residuals of
+at most 0.5%. On the circle the slopes rise steadily and are 0.04–0.08 short at
+1024 cells (**observed**).
+
+The heuristic is sharper as a sum. A cell of length $\ell$ at distance $d$
+from the zero contributes about $\ell^3d^{-1-1/k_{\max}}$, so a uniform mesh gives
+$h^{2-1/k_{\max}}\sum_i i^{-1-1/k_{\max}}$. This is not the touching cell
+alone. Alignment fixes the constant's dependence on $f$, not the rate, and costs
+accuracy: the uniform mesh's inserted node beside each zero lowers the constant
+1.3–1.6-fold on the line. Power grading, $\ell(d)\approx\Delta d^\beta$ with
+$\beta>1/(2k_{\max})$, should restore $O(\Delta^2)$ at $O(\Delta^{-1})$ cells
+(**untested**).
+
 ## 9. Homogenisation and the exact coordinate map
 
 This section is written for $h=u^2$; here $p$ denotes the mean state, not the
