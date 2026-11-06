@@ -78,6 +78,8 @@ cell formula before its general-power extension.
    `PiecewiseAffine.aligned` instead builds the mesh around them: every zero is
    a node and the cells between zeros are equal, so each zero keeps its place
    in the mesh under refinement. The examples, studies and playground use it.
+   `grading=γ > 1` also grades the cells towards each zero (x = z + L s^γ),
+   which restores second-order mesh convergence for γ > 2k/(2k−1).
 2. The flux level $\theta = \mathrm{sgn}(u)f(x,u)$ is quantised,
    $\theta\in\delta\mathbb Z$. States between fronts are stationary profiles
    $u = \mathrm{sgn}(g)\,s(\theta)/|g_\Delta|^{1/p}$, where
@@ -143,7 +145,7 @@ python convergence.py --flux "u^2+u^4" --problem line-sign-changing
 - `NAME_pieces.csv`: every closed-form front piece;
 - `NAME_diagnostics.csv`: front count, TV(θ), mass, absorbed mass and edge inflow.
 
-Options: `--delta`, `--nodes`, `--cells`, `--power`, `--flux`, `--time`,
+Options: `--delta`, `--nodes`, `--cells`, `--power`, `--flux`, `--grading`, `--time`,
 `--interface-layer`, `--frames`, `--samples`, `--max-events`, `--output`,
 `--no-plot`. The examples are `sine`, `burgers`, `xu2-shock`, `xu2-blowup`,
 `two-zeros`, `power-sine` ($p=3$), `power-zeros` ($p=3/2$), `poly-zeros`
@@ -163,7 +165,8 @@ from hetfront import PiecewiseAffine, MultiplicativeFlux, HeteroFrontTracker, Pe
 from hetfront.visualization import observe_tracker, overview
 
 g = PiecewiseAffine.from_function(lambda x: x * (1 - x**2), np.linspace(-2, 2, 41))  # zeros become nodes
-# PiecewiseAffine.aligned(lambda x: x * (1 - x**2), 40, interval=(-2, 2)) puts the zeros on a mesh of 40 cells
+# PiecewiseAffine.aligned(lambda x: x * (1 - x**2), 40, interval=(-2, 2)) puts the zeros on a mesh of 40 cells;
+# add grading=2 to grade those cells towards the zeros
 flux = MultiplicativeFlux(g, delta=0.01)                                             # θ ∈ δZ, h = u²
 # MultiplicativeFlux(g, delta=0.01, power=3) gives h(u) = |u|³
 # MultiplicativeFlux(g, delta=0.01, h="u^2+u^4") gives a general convex h
@@ -244,7 +247,8 @@ Two options handle zeros of $g$:
 `--depth` (extra reference refinements), `--samples` (primitive grid),
 `--max-events` (per-run event limit) and `--mesh`. The default exponent remains $p=2$.
 Meshes are zero-aligned by default; `--mesh uniform` gives the uniform meshes
-of the two 2026 reports below. An aligned line mesh at resolution $n$ has $n$
+of the two 2026 reports below, and `--mesh graded --grading γ` grades the
+aligned meshes towards the zeros. An aligned line mesh at resolution $n$ has $n$
 cells; a uniform one has $n$ nodes.
 Each study separates flux-level, coefficient-mesh, and joint refinement.
 CSV rows include the exponent; companion JSON files preserve reference settings
