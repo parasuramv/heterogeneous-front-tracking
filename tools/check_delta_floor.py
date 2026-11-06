@@ -19,7 +19,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from hetfront.nonlinearity import parse as parse_h  # noqa: E402
-from hetfront.studies import PROBLEMS, fitted_order, reference_run, refinement  # noqa: E402
+from hetfront.studies import MESHES, PROBLEMS, fitted_order, mesh_setting, reference_run, refinement  # noqa: E402
 
 
 def main():
@@ -33,8 +33,9 @@ def main():
     p.add_argument("--ref-nodes", type=int, default=1024)
     p.add_argument("--samples", type=int, default=801)
     p.add_argument("--max-events", type=int, default=20_000_000)
-    p.add_argument("--mesh", choices=("aligned", "uniform"), default="aligned",
-                   help="zero-aligned g meshes (default) or the uniform meshes of the 2026-11-05 records")
+    p.add_argument("--mesh", choices=MESHES, default="aligned",
+                   help="zero-aligned g meshes (default), the uniform meshes of the 2026-11-05 records, or graded")
+    p.add_argument("--grading", type=float, default=2.0, help="grading exponent for --mesh graded")
     p.add_argument("--output", type=Path, required=True)
     args = p.parse_args()
     setting = {"power": args.power} if args.flux is None else {"h": args.flux}
@@ -42,7 +43,7 @@ def main():
     label = (f"p{str(args.power).replace('.', 'p')}" if args.flux is None else
              "h-" + slug.replace("|", "").replace("^", "").replace(".", "p"))
     problem = replace(PROBLEMS[args.problem], max_events=args.max_events,
-                      aligned=args.mesh == "aligned", **setting)
+                      **mesh_setting(args.mesh, args.grading), **setting)
     args.output.mkdir(parents=True, exist_ok=True)
     for delta in args.delta:
         ref, info = reference_run(problem, delta, args.ref_nodes)

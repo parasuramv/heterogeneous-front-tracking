@@ -170,6 +170,7 @@ def playground():
     mesh = (-2.0, 2.0)           # line: (a, b) for the g mesh; circle: (origin, period)
     nodes = 41                   # resolution of g_Δ: nodes per period, or nodes - 1 cells on the line
                                  # (the zeros of g become nodes, with equal cells between them)
+    grading = 1.0                # > 1 grades the cells towards the zeros; 2 gives second order near them
     beta = 1e-6                  # required |g'| at every zero
 
     delta = 0.01                 # flux-level spacing: θ takes values in δZ
@@ -194,9 +195,9 @@ def playground():
     # Zero-aligned mesh: every zero of g is a node, cells equal between zeros.
     if periodic:
         origin, period = mesh
-        g_delta = PiecewiseAffine.aligned(g, nodes, period=period, origin=origin, beta=beta)
+        g_delta = PiecewiseAffine.aligned(g, nodes, period=period, origin=origin, beta=beta, grading=grading)
     else:
-        g_delta = PiecewiseAffine.aligned(g, nodes - 1, interval=mesh, beta=beta)
+        g_delta = PiecewiseAffine.aligned(g, nodes - 1, interval=mesh, beta=beta, grading=grading)
     if flux_h is None:
         flux = MultiplicativeFlux(g_delta, delta, power)
     else:

@@ -521,6 +521,22 @@ class EntryPointTests(unittest.TestCase):
         mesh = [row["h"] for row in study["mesh"]]  # "h" stays the mesh width
         self.assertGreater(mesh[0], mesh[1])
 
+    def test_graded_mesh_from_the_command_line(self):
+        with tempfile.TemporaryDirectory() as output:
+            subprocess.run([sys.executable, str(ROOT / "convergence.py"), "--problem", "line-sign-changing",
+                            "--mesh", "graded", "--grading", "1.5", "--levels", "2", "--depth", "1",
+                            "--samples", "41", "--no-plot", "--output", output],
+                           cwd=ROOT, check=True, capture_output=True, text=True)
+            record = json.loads((Path(output) / "convergence_line-sign-changing.json").read_text())
+            self.assertEqual((record["reference"]["mesh"], record["reference"]["grading"]), ("graded", 1.5))
+            run = subprocess.run([sys.executable, str(ROOT / "main.py"), "--example", "two-zeros", "--grading", "2",
+                                  "--delta", "0.05", "--frames", "3", "--samples", "41", "--no-plot",
+                                  "--output", output], cwd=ROOT, check=True, capture_output=True, text=True)
+            self.assertIn("3 zeros", run.stdout)
+            bad = subprocess.run([sys.executable, str(ROOT / "main.py"), "--example", "two-zeros", "--grading",
+                                  "0.5", "--no-plot", "--output", output], cwd=ROOT, capture_output=True, text=True)
+            self.assertNotEqual(bad.returncode, 0)
+
     def test_convergence_cli_with_flux(self):
         with tempfile.TemporaryDirectory() as output:
             subprocess.run([sys.executable, str(ROOT / "convergence.py"), "--problem", "line-sign-changing",

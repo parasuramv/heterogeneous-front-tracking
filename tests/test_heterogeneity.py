@@ -183,5 +183,67 @@ class AlignedMeshTests(unittest.TestCase):
             PiecewiseAffine.aligned(g, 0, interval=(0, 1))
 
 
+class GradedMeshTests(unittest.TestCase):
+    """PiecewiseAffine.aligned(..., grading=γ): same arcs and counts, cells graded towards zeros."""
+
+    g = staticmethod(lambda x: np.sin(2 * np.pi * x) + 0.3)
+
+    def test_map_is_monotone_c1_and_symmetric(self):
+        from hetfront.heterogeneity import _graded
+        for gamma in (1.25, 2.0, 3.0):
+            for left, right in ((True, True), (True, False), (False, True)):
+                w = _graded(64, left, right, gamma)
+                self.assertEqual((w[0], w[-1]), (0.0, 1.0))
+                self.assertTrue(np.all(np.diff(w) > 0))
+            w = _graded(64, True, True, gamma)
+            np.testing.assert_allclose(w + w[::-1], 1.0, atol=1e-15)
+            d = np.diff(w) * 64
+            self.assertAlmostEqual(d[31], d[32], places=12)          # C¹ at s = 1/2
+            self.assertLess(abs(d[31] - gamma), 0.1)
+        np.testing.assert_array_equal(_graded(8, True, True, 1.0), np.linspace(0, 1, 9))
+        np.testing.assert_array_equal(_graded(8, False, False, 3.0), np.linspace(0, 1, 9))
+
+    def test_same_zeros_and_counts_as_aligned(self):
+        for cells in (16, 64):
+            plain = PiecewiseAffine.aligned(self.g, cells, period=1.0)
+            graded = PiecewiseAffine.aligned(self.g, cells, period=1.0, grading=2.0)
+            np.testing.assert_allclose(graded.zeros, plain.zeros, atol=1e-15)
+            self.assertEqual(len(graded.nodes), len(plain.nodes))
+            lo, hi = sorted(plain.zeros)
+            count = lambda gd: int(np.sum((gd.nodes > lo) & (gd.nodes < hi)))
+            self.assertEqual(count(graded), count(plain))     # same cells on each arc
+
+    def test_touching_cell_shrinks_like_h_to_the_gamma(self):
+        for gamma in (1.5, 2.0, 3.0):
+            sizes = []
+            for cells in (32, 64, 128):
+                gd = PiecewiseAffine.aligned(self.g, cells, period=1.0, grading=gamma)
+                c = gd.cell_of(gd.zeros[0])
+                sizes.append(gd.right[c] - gd.left[c])
+            for a, b in zip(sizes, sizes[1:]):
+                self.assertAlmostEqual(a / b, 2 ** gamma, places=6)
+
+    def test_graded_refinement_is_nested(self):
+        meshes = [PiecewiseAffine.aligned(self.g, 16 * 2 ** k, period=1.0, grading=2.5) for k in range(4)]
+        for coarse, fine in zip(meshes[:-1], meshes[1:]):
+            for x in coarse.nodes:
+                self.assertLess(np.min(np.abs(np.asarray(fine.nodes) - x)), 1e-13)
+
+    def test_line_grades_only_towards_zeros(self):
+        g = lambda x: x * (1 - x * x)
+        gd = PiecewiseAffine.aligned(g, 16, interval=(-2, 2), grading=2.0)
+        widths = np.diff(gd.nodes)
+        # Arc [-2, -1]: zero at its right end only, so the cells shrink towards -1.
+        self.assertTrue(np.all(np.diff(widths[:4]) < 0))
+        self.assertAlmostEqual(widths[3], 1 / 16)
+        well = PiecewiseAffine.aligned(lambda x: 2 + np.sin(x), 12, interval=(0, 3), grading=3.0)
+        np.testing.assert_allclose(np.diff(well.nodes), 0.25)
+
+    def test_grading_argument(self):
+        for bad in (0.5, math.inf, math.nan):
+            with self.assertRaises(ValueError):
+                PiecewiseAffine.aligned(self.g, 16, period=1.0, grading=bad)
+
+
 if __name__ == "__main__":
     unittest.main()

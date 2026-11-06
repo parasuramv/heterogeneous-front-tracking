@@ -11,7 +11,8 @@ CSV rows, JSON reference metadata, and ``results/convergence.png`` and
 prints fitted log-log orders for exact θ-L¹ and sampled primitive maxima. By
 default each g mesh has every zero of g as a node, with equal cells between
 zeros, so the zeros sit at the same place in the mesh at every level;
-``--mesh uniform`` reproduces the uniform meshes of the earlier reports. These
+``--mesh uniform`` reproduces the uniform meshes of the earlier reports, and
+``--mesh graded --grading γ`` grades the aligned meshes towards the zeros. These
 are observations, not proofs. Nonquadratic filenames include the power, or
 for a general h a slug such as ``_h-u2+u4``; quadratic filenames retain
 their original names.
@@ -26,7 +27,7 @@ import numpy as np
 
 import _srcpath  # noqa: F401
 from hetfront.nonlinearity import Power, parse as parse_h
-from hetfront.studies import PROBLEMS, fitted_order, standard_study
+from hetfront.studies import MESHES, PROBLEMS, fitted_order, mesh_setting, standard_study
 from hetfront.trajectory import PowerLaw
 
 
@@ -46,9 +47,11 @@ def main():
     p.add_argument("--samples", type=int, default=801, help="primitive sampling points")
     p.add_argument("--levels", type=int, default=5)
     p.add_argument("--depth", type=int, default=2, help="extra halvings for the reference")
-    p.add_argument("--mesh", choices=("aligned", "uniform"), default="aligned",
-                   help="g meshes with every zero a node (default), or the uniform meshes of the "
-                        "2026-10-15 and 2026-11-05 reports")
+    p.add_argument("--mesh", choices=MESHES, default="aligned",
+                   help="g meshes with every zero a node (default); the uniform meshes of the "
+                        "2026-10-15 and 2026-11-05 reports; or aligned meshes graded towards the zeros")
+    p.add_argument("--grading", type=float, default=2.0,
+                   help="grading exponent γ > 1 for --mesh graded (default 2)")
     p.add_argument("--output", default="results")
     p.add_argument("--no-plot", action="store_true")
     args = p.parse_args()
@@ -63,6 +66,7 @@ def main():
                 powers.append(h.p)
             else:
                 fluxes.append(h)
+        mesh = mesh_setting(args.mesh, args.grading)
         if args.levels < 2 or args.depth < 1 or args.samples < 2 or args.max_events < 1:
             raise ValueError("levels >= 2, depth >= 1, samples >= 2, and max-events >= 1 are required")
     except ValueError as error:
@@ -76,8 +80,7 @@ def main():
     for label, setting in cases:
         for name in names:
             print(f"Running {name}, {label} ({args.levels} levels, reference depth {args.depth})", flush=True)
-            problem = replace(PROBLEMS[name], max_events=args.max_events, aligned=args.mesh == "aligned",
-                              **setting)
+            problem = replace(PROBLEMS[name], max_events=args.max_events, **mesh, **setting)
             study = standard_study(problem, levels=args.levels, depth=args.depth, samples=args.samples)
             if "h" in setting:
                 key = f"{name}_h-{flux_slug(setting['h'])}"

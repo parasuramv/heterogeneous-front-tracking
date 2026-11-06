@@ -39,6 +39,7 @@ class Problem:
     max_events: int = 1_000_000
     h: object = None       # general convex h (string or Nonlinearity); overrides power
     aligned: bool = True   # zero-aligned meshes; False gives the uniform meshes of the 2026 reports
+    grading: float = 1.0   # > 1 grades aligned meshes towards the zeros (PiecewiseAffine.aligned)
 
     def cells(self, nodes):
         """Cells of the g mesh at resolution ``nodes``.
@@ -53,10 +54,10 @@ class Problem:
         if self.periodic:
             o, L = self.mesh
             if self.aligned:
-                return PiecewiseAffine.aligned(self.g, nodes, period=L, origin=o)
+                return PiecewiseAffine.aligned(self.g, nodes, period=L, origin=o, grading=self.grading)
             return PiecewiseAffine.from_function(self.g, o + np.arange(nodes) * L / nodes, period=L)
         if self.aligned:
-            return PiecewiseAffine.aligned(self.g, nodes, interval=self.mesh)
+            return PiecewiseAffine.aligned(self.g, nodes, interval=self.mesh, grading=self.grading)
         return PiecewiseAffine.from_function(self.g, np.linspace(*self.mesh, nodes))
 
     def tracker(self, delta, nodes, **kwargs):
@@ -111,6 +112,7 @@ def reference_run(problem, delta, nodes, final_time=None):
     ref = problem.tracker(delta, nodes).run(T)
     return ref, {"power": _power(problem), "flux": _flux_label(problem), "final_time": T, "delta": delta,
                  "nodes": nodes, "cells": problem.cells(nodes), "mesh": _mesh_label(problem),
+                 "grading": problem.grading if problem.aligned else 1.0,
                  "max_events": problem.max_events, "events": ref.event_count,
                  "seconds": time.perf_counter() - start}
 
@@ -134,8 +136,24 @@ def refinement(problem, pairs, reference, *, samples=801):
     return rows
 
 
+MESHES = ("aligned", "uniform", "graded")
+
+
+def mesh_setting(mesh, grading=2.0):
+    """``Problem`` fields for a mesh label: 'aligned', 'uniform', or 'graded' with exponent ``grading``."""
+    if mesh not in MESHES:
+        raise ValueError(f"mesh must be one of {MESHES}")
+    if mesh == "graded":
+        if not (math.isfinite(grading) and grading > 1):
+            raise ValueError("a graded mesh needs a grading exponent > 1")
+        return {"aligned": True, "grading": float(grading)}
+    return {"aligned": mesh == "aligned", "grading": 1.0}
+
+
 def _mesh_label(problem):
-    return "aligned" if problem.aligned else "uniform"
+    if not problem.aligned:
+        return "uniform"
+    return "graded" if problem.grading > 1 else "aligned"
 
 
 def _power(problem):

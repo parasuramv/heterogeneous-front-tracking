@@ -1,5 +1,6 @@
 """Regression cases discovered by the October 2026 code/theory audit."""
 from dataclasses import replace
+import math
 import unittest
 
 import numpy as np
@@ -154,6 +155,19 @@ class StraighteningTests(unittest.TestCase):
             self.assertEqual(row['cells'], cells)
             self.assertEqual(len(problem.heterogeneity(9).nodes), cells + 1)
             self.assertEqual(row['h'], 8 / cells)
+
+    def test_mesh_settings_and_labels(self):
+        from hetfront.studies import mesh_setting, reference_run
+        self.assertEqual(mesh_setting("uniform"), {"aligned": False, "grading": 1.0})
+        self.assertEqual(mesh_setting("aligned"), {"aligned": True, "grading": 1.0})
+        self.assertEqual(mesh_setting("graded", 1.5), {"aligned": True, "grading": 1.5})
+        for bad in (("graded", 1.0), ("graded", math.nan), ("coarse", 2.0)):
+            with self.assertRaises(ValueError):
+                mesh_setting(*bad)
+        for mesh, grading in (("uniform", 1.0), ("aligned", 1.0), ("graded", 2.0)):
+            problem = replace(PROBLEMS['circle-sign-changing'], **mesh_setting(mesh, 2.0))
+            _, info = reference_run(problem, 0.1, 16, final_time=0.05)
+            self.assertEqual((info['mesh'], info['grading']), (mesh, grading))
 
 
 if __name__ == '__main__':

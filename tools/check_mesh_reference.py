@@ -12,7 +12,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from hetfront.nonlinearity import parse as parse_h
-from hetfront.studies import PROBLEMS, errors, fitted_order, reference_run
+from hetfront.studies import PROBLEMS, errors, fitted_order, mesh_setting, reference_run
 
 
 def main():
@@ -42,9 +42,9 @@ def main():
             continue
         setting = {"h": baseline["flux"]} if general else {"power": baseline["power"]}
         # Records written before zero-aligned meshes carry no mesh label: uniform.
-        aligned = baseline["reference"].get("mesh", "uniform") == "aligned"
-        problem = replace(PROBLEMS[baseline["problem"]], max_events=args.max_events, aligned=aligned,
-                          **setting)
+        ref_info = baseline["reference"]
+        mesh = mesh_setting(ref_info.get("mesh", "uniform"), ref_info.get("grading", 2.0))
+        problem = replace(PROBLEMS[baseline["problem"]], max_events=args.max_events, **mesh, **setting)
         label = f"h={baseline['flux']}" if general else f"p={problem.power:g}"
         settings = baseline["reference"]
         print(f"Checking {problem.name}, {label}", flush=True)

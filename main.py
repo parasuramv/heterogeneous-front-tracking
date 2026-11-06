@@ -14,6 +14,7 @@ Files appear in ``results/`` (or ``--output``):
 - ``<name>_diagnostics.csv``  time, fronts, total variation of θ, mass, absorbed mass, edge inflow, events
 """
 import argparse
+from dataclasses import replace
 import csv
 import math
 from pathlib import Path
@@ -36,6 +37,7 @@ def parse(argv):
     p.add_argument("--power", type=float, help="p in h(u) = |u|^p, p > 1 (default: the example's)")
     p.add_argument("--flux", help="general convex h, e.g. 'u^2+u^4', '|u|^3 + 0.5u^2', or 'h+; h-' for "
                                   "an asymmetric h such as 'u^2; u^2+u^4' (overrides --power)")
+    p.add_argument("--grading", type=float, help="grade the g mesh towards zeros with this exponent > 1")
     p.add_argument("--interface-layer", type=float, default=0.0, help="θ = 0 within this distance of zeros")
     p.add_argument("--samples", type=int, default=801, help="spatial samples of the colour field")
     p.add_argument("--frames", type=int, default=151, help="observation times")
@@ -63,6 +65,10 @@ def main(argv=None):
             h = parse_h(args.flux).validate()
         except (ValueError, ArithmeticError) as error:
             raise SystemExit(f"--flux: {error}")
+    if args.grading is not None:
+        if not (math.isfinite(args.grading) and args.grading >= 1):
+            raise SystemExit("--grading must be finite and at least 1")
+        example = replace(example, grading=args.grading)
     tracker = example.build(args.delta, args.nodes, args.cells, args.power, h,
                             interface_layer=args.interface_layer, max_events=args.max_events)
     final = example.final_time if args.time is None else args.time

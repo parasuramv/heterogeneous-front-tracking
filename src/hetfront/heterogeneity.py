@@ -54,6 +54,19 @@ def _arc_counts(lengths, cells, minima):
     return counts
 
 
+def _graded(n, left, right, gamma):
+    """n + 1 points from 0 to 1, graded with exponent gamma towards the flagged ends."""
+    s = np.linspace(0.0, 1.0, n + 1)
+    if gamma == 1 or not (left or right):
+        return s
+    if left and right:
+        # 2^{γ-1} s^γ on [0, 1/2], mirrored on [1/2, 1]: C¹ with slope γ at s = 1/2.
+        half = np.minimum(s, 1.0 - s)
+        w = 2.0 ** (gamma - 1) * half ** gamma
+        return np.where(s <= 0.5, w, 1.0 - w)
+    return s ** gamma if left else 1.0 - (1.0 - s) ** gamma
+
+
 class PiecewiseAffine:
     """Continuous piecewise-affine g_Δ with every zero a node.
 
@@ -319,7 +332,7 @@ class PiecewiseAffine:
 
     @classmethod
     def aligned(cls, g, cells, *, interval=None, period=None, origin=0.0, dg=None, beta=1e-6,
-                extend="constant", oversample=16):
+                extend="constant", oversample=16, grading=1.0):
         """Interpolate g on a zero-aligned mesh of about ``cells`` cells.
 
         Give ``interval=(a, b)`` on the line, or ``period=L`` (chart near
@@ -334,8 +347,20 @@ class PiecewiseAffine:
         across a dyadic refinement. With a uniform mesh, a zero instead splits its
         cell at a fraction that changes from level to level. On a circle the
         chart starts at the first node at or after ``origin``.
+
+        ``grading=γ > 1`` grades every arc towards the zeros it touches, with the
+        same cell counts. Uniform parameters s map to x = z + L s^γ from a zero
+        z, so the cell touching the zero has length about L n^{-γ}, and cell
+        lengths grow like Δ (d/L)^{1-1/γ} with distance d. An arc between two
+        zeros uses the symmetric C¹ map 2^{γ-1} s^γ on each half. The local
+        heuristic predicts a mesh order of min(2, γ(2 - 1/k)) near a zero
+        where |U| ~ |x - z|^{-1/k}, so γ > 2k/(2k - 1) is needed for second
+        order. Arcs that touch no zero are not graded.
         """
         cells = positive_count(cells, "cells")
+        grading = float(grading)
+        if not (math.isfinite(grading) and grading >= 1):
+            raise ValueError("grading must be a finite exponent >= 1")
         if (interval is None) == (period is None):
             raise ValueError("give exactly one of interval=(a, b) and period=L")
         kwargs = dict(dg=dg, beta=beta, oversample=oversample)
@@ -362,6 +387,7 @@ class PiecewiseAffine:
             starts = zeros
             stops = np.append(zeros[1:], zeros[0] + period)
             minima = [2] * len(zeros)
+            flags = [True] * (len(zeros) + 1)
         else:
             inner = [z for z in zeros if a + tol < z < b - tol]
             at_a = any(abs(z - a) <= tol for z in zeros)
@@ -372,11 +398,12 @@ class PiecewiseAffine:
             minima = [2 if l and r else 1 for l, r in zip(flags[:-1], flags[1:])]
         counts = _arc_counts((stops - starts).tolist(), cells, minima)
         step = (ends[-1] - ends[0]) / cells
-        if (all(np.min(np.abs(ends - z)) <= tol for z in zeros)
+        if (grading == 1 and all(np.min(np.abs(ends - z)) <= tol for z in zeros)
                 and counts == [round((x1 - x0) / step) for x0, x1 in zip(starts, stops)]):
             return probe    # the uniform mesh is this aligned mesh; keep its exact nodes
-        nodes = np.concatenate([np.linspace(x0, x1, n + 1)[:-1]
-                                for x0, x1, n in zip(starts, stops, counts)])
+        nodes = np.concatenate([x0 + (x1 - x0) * _graded(n, left, right, grading)[:-1]
+                                for x0, x1, n, left, right
+                                in zip(starts, stops, counts, flags[:-1], flags[1:])])
         if period is not None:
             nodes = origin + np.remainder(nodes - origin, period)
             nodes = np.unique(np.where(nodes >= origin + period, origin, nodes))
