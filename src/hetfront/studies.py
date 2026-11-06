@@ -38,11 +38,25 @@ class Problem:
     power: float = 2.0     # theta data stay fixed; physical initial profiles vary with p
     max_events: int = 1_000_000
     h: object = None       # general convex h (string or Nonlinearity); overrides power
+    aligned: bool = True   # zero-aligned meshes; False gives the uniform meshes of the 2026 reports
+
+    def cells(self, nodes):
+        """Cells of the g mesh at resolution ``nodes``.
+
+        On a circle this is ``nodes``. On the line, an aligned mesh has ``nodes``
+        cells, so that dyadic levels keep the zeros at fixed places, and a
+        uniform mesh has ``nodes`` nodes, as in the recorded studies.
+        """
+        return nodes if self.periodic or self.aligned else nodes - 1
 
     def heterogeneity(self, nodes):
         if self.periodic:
             o, L = self.mesh
+            if self.aligned:
+                return PiecewiseAffine.aligned(self.g, nodes, period=L, origin=o)
             return PiecewiseAffine.from_function(self.g, o + np.arange(nodes) * L / nodes, period=L)
+        if self.aligned:
+            return PiecewiseAffine.aligned(self.g, nodes, interval=self.mesh)
         return PiecewiseAffine.from_function(self.g, np.linspace(*self.mesh, nodes))
 
     def tracker(self, delta, nodes, **kwargs):
@@ -96,7 +110,8 @@ def reference_run(problem, delta, nodes, final_time=None):
     start = time.perf_counter()
     ref = problem.tracker(delta, nodes).run(T)
     return ref, {"power": _power(problem), "flux": _flux_label(problem), "final_time": T, "delta": delta,
-                 "nodes": nodes, "max_events": problem.max_events, "events": ref.event_count,
+                 "nodes": nodes, "cells": problem.cells(nodes), "mesh": _mesh_label(problem),
+                 "max_events": problem.max_events, "events": ref.event_count,
                  "seconds": time.perf_counter() - start}
 
 
@@ -112,11 +127,15 @@ def refinement(problem, pairs, reference, *, samples=801):
         e_theta, e_prim = errors(tr, reference, problem.window, samples=samples)
         rows.append({"power": _power(problem), "flux": _flux_label(problem), "final_time": reference.time,
                      "samples": samples,
-                     "delta": delta, "nodes": nodes,
-                     "h": span / (nodes if problem.periodic else nodes - 1), "theta_l1": e_theta,
+                     "delta": delta, "nodes": nodes, "cells": problem.cells(nodes),
+                     "h": span / problem.cells(nodes), "theta_l1": e_theta,
                      "primitive": e_prim, "fronts": tr.front_count(), "events": tr.event_count,
                      "seconds": seconds})
     return rows
+
+
+def _mesh_label(problem):
+    return "aligned" if problem.aligned else "uniform"
 
 
 def _power(problem):

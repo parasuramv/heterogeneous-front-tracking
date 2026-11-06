@@ -75,6 +75,9 @@ cell formula before its general-power extension.
 
 1. $g'_\Delta$ is the cell average of $g'$, so $g_\Delta$ is the nodal
    interpolant. Detected zeros of $g$ are located and inserted as nodes.
+   `PiecewiseAffine.aligned` instead builds the mesh around them: every zero is
+   a node and the cells between zeros are equal, so each zero keeps its place
+   in the mesh under refinement. The examples, studies and playground use it.
 2. The flux level $\theta = \mathrm{sgn}(u)f(x,u)$ is quantised,
    $\theta\in\delta\mathbb Z$. States between fronts are stationary profiles
    $u = \mathrm{sgn}(g)\,s(\theta)/|g_\Delta|^{1/p}$, where
@@ -160,6 +163,7 @@ from hetfront import PiecewiseAffine, MultiplicativeFlux, HeteroFrontTracker, Pe
 from hetfront.visualization import observe_tracker, overview
 
 g = PiecewiseAffine.from_function(lambda x: x * (1 - x**2), np.linspace(-2, 2, 41))  # zeros become nodes
+# PiecewiseAffine.aligned(lambda x: x * (1 - x**2), 40, interval=(-2, 2)) puts the zeros on a mesh of 40 cells
 flux = MultiplicativeFlux(g, delta=0.01)                                             # θ ∈ δZ, h = u²
 # MultiplicativeFlux(g, delta=0.01, power=3) gives h(u) = |u|³
 # MultiplicativeFlux(g, delta=0.01, h="u^2+u^4") gives a general convex h
@@ -179,8 +183,9 @@ Initial data can also be given directly as levels:
 `HeteroFrontTracker(flux, positions, levels)`, or
 `HeteroFrontTracker.from_theta(flux, positions, theta_values)`.
 
-On the circle, use `PiecewiseAffine.from_function(g, nodes, period=L)` and
-`PeriodicHeteroFrontTracker`; N breakpoints take N levels.
+On the circle, use `PiecewiseAffine.from_function(g, nodes, period=L)` (or
+`PiecewiseAffine.aligned(g, cells, period=L)`) and `PeriodicHeteroFrontTracker`;
+N breakpoints take N levels, given in any window of one period.
 
 Two options handle zeros of $g$:
 
@@ -234,8 +239,11 @@ Two options handle zeros of $g$:
 ## Convergence experiments
 
 `convergence.py` accepts repeated `--power` values, `--problem`, `--levels`,
-`--depth` (extra reference refinements), `--samples` (primitive grid), and
-`--max-events` (per-run event limit). The default exponent remains $p=2$.
+`--depth` (extra reference refinements), `--samples` (primitive grid),
+`--max-events` (per-run event limit) and `--mesh`. The default exponent remains $p=2$.
+Meshes are zero-aligned by default; `--mesh uniform` gives the uniform meshes
+of the two 2026 reports below. An aligned line mesh at resolution $n$ has $n$
+cells; a uniform one has $n$ nodes.
 Each study separates flux-level, coefficient-mesh, and joint refinement.
 CSV rows include the exponent; companion JSON files preserve reference settings
 and costs. Nonquadratic filenames include the power, so different powers do

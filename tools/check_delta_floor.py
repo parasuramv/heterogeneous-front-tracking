@@ -7,7 +7,8 @@ coefficient-mesh error at that δ. Writes one JSON record per (problem,
 nonlinearity, δ).
 
     python tools/check_delta_floor.py --problem circle-sign-changing --power 3 \\
-        --delta 0.0015625 --delta 0.000390625 --output docs/data/convergence-2026-11-05/delta-floor
+        --delta 0.0015625 --delta 0.000390625 --mesh uniform \\
+        --output docs/data/convergence-2026-11-05/delta-floor
 """
 import argparse
 from dataclasses import replace
@@ -32,13 +33,16 @@ def main():
     p.add_argument("--ref-nodes", type=int, default=1024)
     p.add_argument("--samples", type=int, default=801)
     p.add_argument("--max-events", type=int, default=20_000_000)
+    p.add_argument("--mesh", choices=("aligned", "uniform"), default="aligned",
+                   help="zero-aligned g meshes (default) or the uniform meshes of the 2026-11-05 records")
     p.add_argument("--output", type=Path, required=True)
     args = p.parse_args()
     setting = {"power": args.power} if args.flux is None else {"h": args.flux}
     slug = str(parse_h(args.flux)).replace(" ", "").replace("u>0:", "").replace("u<0:", "").replace(";", "_")
     label = (f"p{str(args.power).replace('.', 'p')}" if args.flux is None else
              "h-" + slug.replace("|", "").replace("^", "").replace(".", "p"))
-    problem = replace(PROBLEMS[args.problem], max_events=args.max_events, **setting)
+    problem = replace(PROBLEMS[args.problem], max_events=args.max_events,
+                      aligned=args.mesh == "aligned", **setting)
     args.output.mkdir(parents=True, exist_ok=True)
     for delta in args.delta:
         ref, info = reference_run(problem, delta, args.ref_nodes)

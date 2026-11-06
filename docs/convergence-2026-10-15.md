@@ -92,7 +92,7 @@ an error reduction at every refinement step.
 From the repository root:
 
 ```bash
-python convergence.py --power 1.5 --power 3 --levels 5 --depth 2 --no-plot --max-events 5000000 --output docs/data/convergence-2026-10-15
+python convergence.py --power 1.5 --power 3 --levels 5 --depth 2 --no-plot --max-events 5000000 --mesh uniform --output docs/data/convergence-2026-10-15
 python tools/check_mesh_reference.py docs/data/convergence-2026-10-15 --power 1.5 --output docs/data/convergence-2026-10-15/checks/p1p5.json
 python tools/check_mesh_reference.py docs/data/convergence-2026-10-15 --power 3 --output docs/data/convergence-2026-10-15/checks/p3.json
 ```

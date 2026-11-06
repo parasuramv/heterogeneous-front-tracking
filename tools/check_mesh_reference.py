@@ -41,7 +41,10 @@ def main():
         if args.flux and (not general or baseline["flux"] not in wanted):
             continue
         setting = {"h": baseline["flux"]} if general else {"power": baseline["power"]}
-        problem = replace(PROBLEMS[baseline["problem"]], max_events=args.max_events, **setting)
+        # Records written before zero-aligned meshes carry no mesh label: uniform.
+        aligned = baseline["reference"].get("mesh", "uniform") == "aligned"
+        problem = replace(PROBLEMS[baseline["problem"]], max_events=args.max_events, aligned=aligned,
+                          **setting)
         label = f"h={baseline['flux']}" if general else f"p={problem.power:g}"
         settings = baseline["reference"]
         print(f"Checking {problem.name}, {label}", flush=True)

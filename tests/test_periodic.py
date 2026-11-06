@@ -94,6 +94,35 @@ class SignChangingCircleTests(unittest.TestCase):
         self.assertEqual(tracker.sample_levels(np.array([0.98, 0.02, 0.48, 0.25])).tolist(), [0, 0, 0, 2])
 
 
+    def test_chart_origin_does_not_change_the_solution(self):
+        # The same g_Δ in charts [0, 1) and [3/8, 11/8); positions are given in
+        # [0, 1) both times and wrapped into the second chart.
+        nodes = np.arange(8) / 8
+        values = np.array([1.0, 0.5, -1.0, -1.5, -0.5, 1.0, 2.0, 1.5])
+        rotated = np.concatenate((nodes[3:], nodes[:3] + 1))
+        positions, theta = [0.1, 0.2, 0.45, 0.7], [0.5, -0.2, 0.3, 0.1]
+        for h in (None, "u^2+u^4"):
+            runs = []
+            for chart, vals in ((nodes, values), (rotated, np.roll(values, -3))):
+                g = PiecewiseAffine(chart, vals, period=1.0)
+                flux = MultiplicativeFlux(g, 0.05) if h is None else MultiplicativeFlux(g, 0.05, h=h)
+                runs.append(PeriodicHeteroFrontTracker.from_theta(flux, positions, theta).run(0.6))
+            a, b = runs
+            self.assertEqual(a.event_count, b.event_count)
+            np.testing.assert_allclose(np.sort(a.domain.wrap(a.positions()) % 1.0),
+                                       np.sort(b.domain.wrap(b.positions()) % 1.0), atol=1e-12)
+            xs = np.linspace(0.0, 0.999, 400)
+            np.testing.assert_allclose(a.primitive(xs), b.primitive(xs), atol=1e-11)
+            self.assertAlmostEqual(a.integral(), b.integral(), places=12)
+
+    def test_positions_must_span_less_than_a_period(self):
+        g = PiecewiseAffine(np.arange(4) / 4 + 0.3, [1.0, 2.0, 1.5, 1.0], period=1.0)
+        flux = MultiplicativeFlux(g, 0.1)
+        tracker = PeriodicHeteroFrontTracker(flux, [0.0, 0.5], [1, 2])     # wrapped into [0.3, 1.3)
+        self.assertEqual(tracker.sample_levels(np.array([0.1, 0.4, 0.7, 0.95, 1.2])).tolist(), [1, 1, 2, 2, 1])
+        with self.assertRaises(ValueError):
+            PeriodicHeteroFrontTracker(flux, [0.0, 1.0], [1, 2])
+
 @unittest.skipIf(_oracles.circle_fronttrack() is None, "fronttrack.periodic (scalar-front-tracking) not available")
 class CircleOracleTests(unittest.TestCase):
     """Constant g on S¹: identical to fronttrack.PeriodicFrontTracker on U[δZ]."""

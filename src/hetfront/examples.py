@@ -33,13 +33,25 @@ class Example:
     characteristic_starts: tuple = ()
     power: float = 2.0
     h: object = None            # general convex h (string or Nonlinearity); overrides power
+    aligned: bool = True        # zeros of g on mesh nodes, cells equal between zeros
 
     def heterogeneity(self, nodes=None):
+        """g_Δ with ``nodes`` nodes per period, or ``nodes - 1`` cells on the line.
+
+        With ``aligned`` (the default) every zero of g is a node and the cells
+        between zeros are equal (``PiecewiseAffine.aligned``). Where the uniform
+        mesh already has that property it is used as is, so every listed example
+        has its uniform mesh at its default resolution.
+        """
         nodes = self.defaults["nodes"] if nodes is None else int(nodes)
         if self.periodic:
             origin, period = self.mesh
+            if self.aligned:
+                return PiecewiseAffine.aligned(self.g, nodes, period=period, origin=origin)
             grid = origin + np.arange(nodes) * period / nodes
             return PiecewiseAffine.from_function(self.g, grid, period=period)
+        if self.aligned:
+            return PiecewiseAffine.aligned(self.g, nodes - 1, interval=self.mesh, extend=self.extend)
         return PiecewiseAffine.from_function(self.g, np.linspace(*self.mesh, nodes), extend=self.extend)
 
     def flux(self, delta=None, nodes=None, power=None, h=None):

@@ -28,7 +28,9 @@ class PeriodicHeteroFrontTracker(_TrackerCore):
     N breakpoints require N levels: ``levels[j]`` occupies the positively
     oriented arc from ``positions[j]`` to ``positions[j+1]``, including the
     final arc through the seam. For a constant level, give no breakpoints and
-    one level. ``interface_layer`` behaves as on the line.
+    one level. Positions may be given in any window of one period, such as
+    [0, L) for a chart that starts after 0; they are wrapped into the chart.
+    ``interface_layer`` behaves as on the line.
     """
 
     cyclic = True
@@ -48,10 +50,18 @@ class PeriodicHeteroFrontTracker(_TrackerCore):
         levels = integer_levels(levels).tolist()
         if p.ndim != 1 or not np.all(np.isfinite(p)) or np.any(np.diff(p) <= 0):
             raise ValueError("positions must be finite and strictly increasing")
-        if len(p) and (p[0] < o or p[-1] >= o + L):
-            raise ValueError("positions must lie in the chart [n_0, n_0 + period)")
         if len(levels) != (len(p) if len(p) else 1):
             raise ValueError("need N positions and N levels, or none and one constant level")
+        if len(p) and p[-1] >= p[0] + L:
+            raise ValueError("positions must span less than one period")
+        if len(p) and (p[0] < o or p[-1] >= o + L):
+            # Wrap into the chart [n_0, n_0 + L). That rotates the cyclic list, and
+            # each level stays with the position where its arc starts.
+            w = np.asarray(self.domain.wrap(p), dtype=float)
+            order = np.argsort(w, kind="stable")
+            p, levels = w[order], [levels[i] for i in order]
+            if np.any(np.diff(p) <= 0):
+                raise ValueError("positions must stay distinct on the circle")
         eps = float(interface_layer)
         zeros = np.asarray(g.zeros)
         if len(zeros) > 1:

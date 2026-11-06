@@ -168,7 +168,8 @@ def playground():
 
     periodic = False             # True: the circle [mesh_a, mesh_a + period)
     mesh = (-2.0, 2.0)           # line: (a, b) for the g mesh; circle: (origin, period)
-    nodes = 41                   # mesh nodes for g_Δ (zeros are added automatically)
+    nodes = 41                   # resolution of g_Δ: nodes per period, or nodes - 1 cells on the line
+                                 # (the zeros of g become nodes, with equal cells between them)
     beta = 1e-6                  # required |g'| at every zero
 
     delta = 0.01                 # flux-level spacing: θ takes values in δZ
@@ -190,12 +191,12 @@ def playground():
     space_samples, time_frames = 801, 121
     ''')
     build = code('''
+    # Zero-aligned mesh: every zero of g is a node, cells equal between zeros.
     if periodic:
         origin, period = mesh
-        grid = origin + np.arange(nodes) * period / nodes
-        g_delta = PiecewiseAffine.from_function(g, grid, period=period, beta=beta)
+        g_delta = PiecewiseAffine.aligned(g, nodes, period=period, origin=origin, beta=beta)
     else:
-        g_delta = PiecewiseAffine.from_function(g, np.linspace(*mesh, nodes), beta=beta)
+        g_delta = PiecewiseAffine.aligned(g, nodes - 1, interval=mesh, beta=beta)
     if flux_h is None:
         flux = MultiplicativeFlux(g_delta, delta, power)
     else:

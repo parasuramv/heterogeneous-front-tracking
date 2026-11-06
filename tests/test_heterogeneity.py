@@ -100,5 +100,88 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(h.next_cell(h.n_cells - 1, 1), 0)
 
 
+class AlignedMeshTests(unittest.TestCase):
+    """PiecewiseAffine.aligned: zeros are nodes, cells equal between zeros, nested refinement."""
+
+    def check_arcs(self, gd, cells):
+        nodes = np.asarray(gd.nodes)
+        self.assertEqual(len(nodes) if gd.periodic else len(nodes) - 1, cells)
+        ends = np.append(nodes, nodes[0] + gd.period) if gd.periodic else nodes
+        widths = np.diff(ends)
+        # Split the cells at the zeros; widths are equal within each arc.
+        breaks = [i for i, x in enumerate(ends) if np.any(np.abs(np.asarray(gd.zeros) - gd.wrap(x)) < 1e-12)]
+        if gd.periodic:
+            breaks = breaks[:-1] if breaks and breaks[-1] == len(ends) - 1 else breaks
+            breaks = breaks + [breaks[0] + len(widths)]
+            widths = np.concatenate((widths, widths))
+        else:
+            breaks = sorted(set([0] + breaks + [len(ends) - 1]))
+        for i, j in zip(breaks[:-1], breaks[1:]):
+            arc = widths[i:j]
+            self.assertLess(np.ptp(arc), 1e-12 * max(1.0, arc[0] * len(arc)))
+
+    def test_circle_zeros_are_nodes_and_arcs_uniform(self):
+        g = lambda x: np.sin(2 * np.pi * x) + 0.3
+        for cells in (16, 32, 64, 128):
+            gd = PiecewiseAffine.aligned(g, cells, period=1.0)
+            self.assertEqual(len(gd.zeros), 2)
+            for z in gd.zeros:
+                self.assertAlmostEqual(np.sin(2 * np.pi * z), -0.3, places=12)
+            self.check_arcs(gd, cells)
+            self.assertTrue(0.0 <= gd.nodes[0] < 1 / cells * 1.2)
+
+    def test_dyadic_refinement_is_nested(self):
+        g = lambda x: np.sin(2 * np.pi * x) * (1 + 0.3 * np.sin(2 * np.pi * x)) + 0.25
+        meshes = [PiecewiseAffine.aligned(g, 16 * 2 ** k, period=1.0) for k in range(4)]
+        for coarse, fine in zip(meshes[:-1], meshes[1:]):
+            fine_nodes = np.asarray(fine.nodes)
+            for x in coarse.nodes:
+                self.assertLess(np.min(np.abs(fine_nodes - x)), 1e-13)
+            # Each zero keeps its place: the cells beside it halve exactly.
+            for z in coarse.zeros:
+                c, f = coarse.cell_of(z), fine.cell_of(z)
+                self.assertAlmostEqual(coarse.right[c] - coarse.left[c],
+                                       2 * (fine.right[f] - fine.left[f]), places=13)
+
+    def test_line_arcs_include_the_interval_ends(self):
+        g = lambda x: x * (1 - x * x)
+        for cells in (15, 30, 60):
+            gd = PiecewiseAffine.aligned(g, cells, interval=(-2, 2))
+            np.testing.assert_allclose(gd.zeros, [-1, 0, 1], atol=1e-14)
+            self.assertEqual((gd.nodes[0], gd.nodes[-1]), (-2.0, 2.0))
+            self.check_arcs(gd, cells)
+        # 15 cells over four unit arcs cannot be uniform: 4, 4, 4 and 3.
+        widths = np.diff(PiecewiseAffine.aligned(g, 15, interval=(-2, 2)).nodes)
+        np.testing.assert_allclose(np.unique(np.round(widths, 12)), [0.25, 1 / 3])
+
+    def test_uniform_mesh_is_kept_when_already_aligned(self):
+        g = lambda x: x * (1 - x * x)
+        uniform = PiecewiseAffine.from_function(g, np.linspace(-2, 2, 81))
+        aligned = PiecewiseAffine.aligned(g, 80, interval=(-2, 2))
+        self.assertTrue(np.array_equal(uniform.nodes, aligned.nodes))
+        self.assertTrue(np.array_equal(uniform.values, aligned.values))
+        well = PiecewiseAffine.aligned(lambda x: 2 + np.sin(x), 12, period=2 * math.pi)
+        np.testing.assert_array_equal(well.nodes, np.arange(12) * 2 * math.pi / 12)
+
+    def test_close_zeros_get_two_cells(self):
+        g = lambda x: (x - 0.3) * (x - 0.31)
+        gd = PiecewiseAffine.aligned(g, 8, interval=(0.0, 1.0), beta=1e-3)
+        np.testing.assert_allclose(gd.zeros, [0.3, 0.31], atol=1e-14)
+        inside = [x for x in gd.nodes if 0.3 + 1e-12 < x < 0.31 - 1e-12]
+        self.assertEqual(len(inside), 1)
+        self.assertTrue(np.all(gd.values[[0, -1]] > 0))
+
+    def test_arguments(self):
+        g = lambda x: np.sin(x)
+        with self.assertRaises(ValueError):
+            PiecewiseAffine.aligned(g, 8)
+        with self.assertRaises(ValueError):
+            PiecewiseAffine.aligned(g, 8, interval=(0, 1), period=1)
+        with self.assertRaises(ValueError):
+            PiecewiseAffine.aligned(g, 8, interval=(1, 0))
+        with self.assertRaises(ValueError):
+            PiecewiseAffine.aligned(g, 0, interval=(0, 1))
+
+
 if __name__ == "__main__":
     unittest.main()

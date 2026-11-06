@@ -187,7 +187,7 @@ four at a time on four cores.
 From the repository root:
 
 ```bash
-python convergence.py --flux "u^2+u^4" --flux "u^2+|u|^3" --levels 5 --depth 2 --no-plot \
+python convergence.py --flux "u^2+u^4" --flux "u^2+|u|^3" --levels 5 --depth 2 --no-plot --mesh uniform \
     --max-events 5000000 --output docs/data/convergence-2026-11-05
 python tools/normalise_flux_records.py docs/data/convergence-2026-11-05
 P="--problem line-well-signed --problem line-sign-changing --problem circle-sign-changing"

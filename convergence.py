@@ -8,7 +8,10 @@
 For each problem, three refinements are compared with a fine reference run:
 δ alone (fine g mesh), Δ alone (fine δ), and both together. The script writes
 CSV rows, JSON reference metadata, and ``results/convergence.png`` and
-prints fitted log-log orders for exact θ-L¹ and sampled primitive maxima. These
+prints fitted log-log orders for exact θ-L¹ and sampled primitive maxima. By
+default each g mesh has every zero of g as a node, with equal cells between
+zeros, so the zeros sit at the same place in the mesh at every level;
+``--mesh uniform`` reproduces the uniform meshes of the earlier reports. These
 are observations, not proofs. Nonquadratic filenames include the power, or
 for a general h a slug such as ``_h-u2+u4``; quadratic filenames retain
 their original names.
@@ -43,6 +46,9 @@ def main():
     p.add_argument("--samples", type=int, default=801, help="primitive sampling points")
     p.add_argument("--levels", type=int, default=5)
     p.add_argument("--depth", type=int, default=2, help="extra halvings for the reference")
+    p.add_argument("--mesh", choices=("aligned", "uniform"), default="aligned",
+                   help="g meshes with every zero a node (default), or the uniform meshes of the "
+                        "2026-10-15 and 2026-11-05 reports")
     p.add_argument("--output", default="results")
     p.add_argument("--no-plot", action="store_true")
     args = p.parse_args()
@@ -70,7 +76,8 @@ def main():
     for label, setting in cases:
         for name in names:
             print(f"Running {name}, {label} ({args.levels} levels, reference depth {args.depth})", flush=True)
-            problem = replace(PROBLEMS[name], max_events=args.max_events, **setting)
+            problem = replace(PROBLEMS[name], max_events=args.max_events, aligned=args.mesh == "aligned",
+                              **setting)
             study = standard_study(problem, levels=args.levels, depth=args.depth, samples=args.samples)
             if "h" in setting:
                 key = f"{name}_h-{flux_slug(setting['h'])}"
@@ -79,7 +86,7 @@ def main():
                 key = name if power == 2 else f"{name}_p{str(power).replace('.', 'p')}"
             studies[key] = study
             ref = study["reference"]
-            print(f"\n{key} ({label}): reference δ = {ref['delta']:.3g}, {ref['nodes']} nodes, "
+            print(f"\n{key} ({label}): reference δ = {ref['delta']:.3g}, {ref['cells']} cells ({ref['mesh']}), "
                   f"{ref['events']} events, {ref['seconds']:.1f} s")
             with open(out / f"convergence_{key}.csv", "w", newline="") as handle:
                 writer = None

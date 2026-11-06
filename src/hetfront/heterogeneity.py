@@ -34,6 +34,26 @@ def _linear_root(x0, g0, x1, g1):
     return x0 + (x1 - x0) * (g0 / (g0 - g1))
 
 
+def _arc_counts(lengths, cells, minima):
+    """Whole cell counts for arcs of the given lengths, summing to ``cells`` when the minima allow.
+
+    Counts are apportioned at the coarsest level reached by halving ``cells``
+    while each arc keeps about four cells on average, by largest remainders, and
+    then doubled back. A dyadic sequence of ``cells`` therefore gives nested
+    meshes, each arc bisected from one level to the next.
+    """
+    m = len(lengths)
+    if cells % 2 == 0 and cells // 2 >= 4 * m:
+        return [2 * n for n in _arc_counts(lengths, cells // 2, minima)]
+    total = math.fsum(lengths)
+    quotas = [cells * length / total for length in lengths]
+    counts = [max(low, math.floor(q)) for q, low in zip(quotas, minima)]
+    spare = cells - sum(counts)
+    for i in sorted(range(m), key=lambda i: (counts[i] - quotas[i], i))[:max(spare, 0)]:
+        counts[i] += 1
+    return counts
+
+
 class PiecewiseAffine:
     """Continuous piecewise-affine g_Δ with every zero a node.
 
@@ -296,6 +316,72 @@ class PiecewiseAffine:
         values = G(merged)
         values[np.isin(merged, zeros)] = 0.0
         return cls(merged, values, period=period, extend=extend, beta=beta)
+
+    @classmethod
+    def aligned(cls, g, cells, *, interval=None, period=None, origin=0.0, dg=None, beta=1e-6,
+                extend="constant", oversample=16):
+        """Interpolate g on a zero-aligned mesh of about ``cells`` cells.
+
+        Give ``interval=(a, b)`` on the line, or ``period=L`` (chart near
+        ``origin``) on a circle. Every zero of g is a node, and the cells between
+        consecutive zeros (or a zero and an end of the interval) are equal. The
+        zeros are found as in ``from_function`` on the uniform mesh with
+        ``cells`` cells. Each arc gets a whole number of equal cells, in
+        proportion to its length: at least one, and two between two zeros. When
+        that is the uniform mesh itself, the uniform mesh is returned unchanged.
+
+        Halving h bisects every arc, so each zero keeps its place in the mesh
+        across a dyadic refinement. With a uniform mesh, a zero instead splits its
+        cell at a fraction that changes from level to level. On a circle the
+        chart starts at the first node at or after ``origin``.
+        """
+        cells = positive_count(cells, "cells")
+        if (interval is None) == (period is None):
+            raise ValueError("give exactly one of interval=(a, b) and period=L")
+        kwargs = dict(dg=dg, beta=beta, oversample=oversample)
+        if period is not None:
+            period, origin = float(period), float(origin)
+            uniform = origin + np.arange(cells) * period / cells
+            probe = cls.from_function(g, uniform, period=period, **kwargs)
+            ends = np.append(uniform, origin + period)
+        else:
+            a, b = (float(v) for v in interval)
+            if not (math.isfinite(a) and math.isfinite(b) and a < b):
+                raise ValueError("interval must be finite with a < b")
+            uniform = np.linspace(a, b, cells + 1)
+            probe = cls.from_function(g, uniform, extend=extend, **kwargs)
+            ends = uniform
+        tol = 64 * np.finfo(float).eps * max(1.0, float(np.max(np.abs(ends))))
+        zeros = np.asarray(probe.zeros, dtype=float)
+        if period is None:
+            zeros = zeros[(zeros >= a - tol) & (zeros <= b + tol)]
+        if not len(zeros):
+            return probe
+
+        if period is not None:
+            starts = zeros
+            stops = np.append(zeros[1:], zeros[0] + period)
+            minima = [2] * len(zeros)
+        else:
+            inner = [z for z in zeros if a + tol < z < b - tol]
+            at_a = any(abs(z - a) <= tol for z in zeros)
+            at_b = any(abs(z - b) <= tol for z in zeros)
+            starts = np.array([a] + inner)
+            stops = np.array(inner + [b])
+            flags = [at_a] + [True] * len(inner) + [at_b]
+            minima = [2 if l and r else 1 for l, r in zip(flags[:-1], flags[1:])]
+        counts = _arc_counts((stops - starts).tolist(), cells, minima)
+        step = (ends[-1] - ends[0]) / cells
+        if (all(np.min(np.abs(ends - z)) <= tol for z in zeros)
+                and counts == [round((x1 - x0) / step) for x0, x1 in zip(starts, stops)]):
+            return probe    # the uniform mesh is this aligned mesh; keep its exact nodes
+        nodes = np.concatenate([np.linspace(x0, x1, n + 1)[:-1]
+                                for x0, x1, n in zip(starts, stops, counts)])
+        if period is not None:
+            nodes = origin + np.remainder(nodes - origin, period)
+            nodes = np.unique(np.where(nodes >= origin + period, origin, nodes))
+            return cls.from_function(g, nodes, period=period, **kwargs)
+        return cls.from_function(g, np.append(nodes, b), extend=extend, **kwargs)
 
     # ---------------------------------------------------------------- queries
     @property

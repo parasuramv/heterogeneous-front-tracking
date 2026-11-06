@@ -1,4 +1,5 @@
 """Regression cases discovered by the October 2026 code/theory audit."""
+from dataclasses import replace
 import unittest
 
 import numpy as np
@@ -145,10 +146,14 @@ class StraighteningTests(unittest.TestCase):
             PeriodicStraightening(PiecewiseAffine([0, .5], [1, -1], period=1))
 
     def test_mesh_width_uses_intervals_on_line(self):
-        problem = PROBLEMS['line-well-signed']
-        ref = problem.tracker(.1, 9)
-        row = refinement(problem, [(.1, 9)], ref)[0]
-        self.assertEqual(row['h'], 1.)
+        # A uniform line mesh counts nodes (9 nodes, 8 cells); an aligned one counts cells.
+        for aligned, cells in ((False, 8), (True, 9)):
+            problem = replace(PROBLEMS['line-well-signed'], aligned=aligned)
+            ref = problem.tracker(.1, 9)
+            row = refinement(problem, [(.1, 9)], ref)[0]
+            self.assertEqual(row['cells'], cells)
+            self.assertEqual(len(problem.heterogeneity(9).nodes), cells + 1)
+            self.assertEqual(row['h'], 8 / cells)
 
 
 if __name__ == '__main__':
