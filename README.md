@@ -257,7 +257,7 @@ therefore vary with $p$.
 The power-law baseline passes **92 unit/regression tests** and **420 deterministic
 randomized cases** (2026-10-15); the largest randomized mass-budget residual
 was $3.62\times10^{-10}$. With general and asymmetric convex $h$ (2026-11-06) the
-suite has **TEST_COUNT tests**. `tools/stress_check.py` adds **300 general-h cases**
+suite has **134 tests**. `tools/stress_check.py` adds **300 general-h cases**
 (polynomial and asymmetric $h$, line and circle, sign-changing $g$, 60 of them a
 reflection oracle), with the largest mass residual $1.91\times10^{-10}$. Power-law
 runs are bit-identical to the baseline on every example, and the 420 cases give

@@ -49,4 +49,6 @@ def main(directory, output, comparison=ROOT / "docs/data/convergence-2026-10-15"
 
 
 if __name__ == "__main__":
+    if len(sys.argv) != 3 or sys.argv[1] in ("-h", "--help"):
+        sys.exit(__doc__.strip())
     main(*sys.argv[1:3])
