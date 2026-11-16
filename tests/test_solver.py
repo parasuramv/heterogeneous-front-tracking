@@ -180,6 +180,30 @@ class EngineTests(unittest.TestCase):
         assert_links(self, tracker)
         self.assertTrue(all(c.prev is None and c.next is None for c in tracker.snapshot()))
 
+    def test_fronts_meeting_at_a_zero_stay_on_their_side(self):
+        """Collisions that land on a zero of g (here pulled there by a large
+        position_tol) must start their fan on the colliding fronts' side of
+        it, and a fan moving into the zero must be absorbed from the
+        interface outwards. Both used to stop with "front reached a zero of g
+        without meeting its interface"."""
+        cases = [(lambda x: (x - 0.25) * (x + 0.5), 33, 53),   # fan started across a zero
+                 (lambda x: x * (1 - x**2), 25, 25)]          # fan absorbed out of order
+        for gfun, nodes, seed in cases:
+            rng = np.random.default_rng(seed)
+            g = PiecewiseAffine.from_function(gfun, np.linspace(-2, 2, nodes))
+            m = int(rng.integers(4, 90))
+            pos = np.sort(rng.choice(-1.5 + 3 * np.arange(8 * m) / (8 * m), m, replace=False))
+            levels = rng.integers(-15, 16, m + 1)
+            tracker = HeteroFrontTracker(MultiplicativeFlux(g, 0.05), pos, levels, position_tol=0.01)
+            tracker.run(9.0)
+            self.assertGreater(tracker.counts["absorption"], 0)
+            assert_links(self, tracker)
+            for a, b in zip(tracker.items, tracker.items[1:]):
+                if isinstance(a, Front) and isinstance(b, Interface):
+                    self.assertLess(a.cell, b.right_cell)
+                if isinstance(a, Interface) and isinstance(b, Front):
+                    self.assertGreater(b.cell, a.left_cell)
+
     def test_backward_time_rejected(self):
         tracker = HeteroFrontTracker(xu2(), [1.0], [0, -1]).run(1.0)
         with self.assertRaises(ValueError):
