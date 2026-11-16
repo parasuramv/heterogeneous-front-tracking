@@ -18,6 +18,7 @@ import math
 import numpy as np
 
 from .domains import Circle
+from .fronts import Front
 from .solver import _TrackerCore
 from ._validation import integer_levels, positive_count
 
@@ -62,6 +63,7 @@ class PeriodicHeteroFrontTracker(_TrackerCore):
             raise ValueError("interface_layer must be >= 0 and less than half the zero spacing")
         self.interface_layer = eps
         self._constant_level = levels[0]
+        self._unsorted = {}  # see _normalize
 
         def circular(a, b):
             d = abs(a - b) % L
@@ -113,21 +115,66 @@ class PeriodicHeteroFrontTracker(_TrackerCore):
         return cls.from_theta(flux, edges, theta, **kwargs)
 
     # --------------------------------------------------------- cyclic order
-    def _normalize(self):
-        """Rotate so canonical positions increase from the largest cyclic descent."""
+    def _normalize(self, touched=None):
+        """Rotate so canonical positions increase from the largest cyclic descent.
+
+        The order starts (at the head) after the largest descent x(prev) - x
+        between cyclic neighbours, the first one in order on ties. Between
+        events no pair of neighbours changes order: a front stays inside its
+        cell until a corner event, closing neighbours collide first, and
+        interfaces do not move. So a positive descent can only appear at a
+        pair an event touched, and it stays positive until an event touches
+        it again. Normally the only one is the wrap pair (last item, head).
+        Simultaneous seam crossings (coincident fronts that corner one at a
+        time) leave others for a while; those are remembered in _unsorted.
+
+        Hence the largest descent lies among the wrap pair, the pairs ending
+        at or starting from a touched item, and the remembered pairs: found
+        in O(len(touched)) instead of O(F). With ``touched=None`` (setup)
+        every pair is compared.
+        """
         if self._count < 2:
+            self._unsorted = {}
             return False
-        pos = self.positions()
-        descents = np.roll(pos, 1) - pos  # descents[i] = x[i-1] - x[i]
-        start = int(np.argmax(descents))
-        if start == 0:
+        head = self._head
+        if touched is None:
+            items = self.items
+            pos = self.positions()
+            descents = np.roll(pos, 1) - pos  # descents[i] = x[i-1] - x[i]
+            start = int(np.argmax(descents))
+            new_head = items[start]
+            self._unsorted = {id(items[i]): items[i] for i in np.flatnonzero(descents > 0) if i != start}
+        else:
+            t = self.time
+
+            def x(item):
+                return item.x(t) if isinstance(item, Front) else item.x
+
+            # A pair is named by its second item; the head names the wrap pair.
+            candidates = {id(head): head}
+            for item in [*touched, *self._unsorted.values()]:
+                if item is not None and self._alive(item):
+                    candidates.setdefault(id(item), item)
+                    candidates.setdefault(id(item.next), item.next)
+            descent = {key: x(item.prev) - x(item) for key, item in candidates.items()}
+            best = max(descent.values())
+            if descent[id(head)] == best:
+                new_head = head  # argmax's first index is the head itself
+            else:
+                winners = {key for key, d in descent.items() if d == best}
+                new_head = head.next
+                while id(new_head) not in winners:  # first in order: only on ties
+                    new_head = new_head.next
+            self._unsorted = {key: item for key, item in candidates.items()
+                              if descent[key] > 0 and item is not new_head}
+        if new_head is head:
             return False
-        old_last = self._head.prev
-        self._head = self.items[start]
+        old_last = head.prev
+        self._head = new_head
         self._items = None
         # Rotation keeps adjacency; only the wrap pair changes, so refresh the
         # former and the new last items (their pair events depend on wrapping).
-        self._refresh_around([old_last, self._head.prev])
+        self._refresh_around([old_last, new_head.prev])
         return True
 
     # --------------------------------------------------------------- queries
